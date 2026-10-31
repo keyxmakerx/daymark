@@ -70,6 +70,8 @@ class MainActivity : FragmentActivity() {
         const val EXTRA_OPEN_TRACKER = "open_tracker"
         /** The Quick Settings tile: open the safety plan, once the lock has been passed (#522). */
         const val EXTRA_OPEN_SAFETY_PLAN = "open_safety_plan"
+        /** With [EXTRA_OPEN_EDITOR]: the person chose to start evening check-ins in the night sky (#540). */
+        const val EXTRA_FROM_SKY = "from_sky"
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -79,6 +81,7 @@ class MainActivity : FragmentActivity() {
         val openEditor = intent?.getBooleanExtra(EXTRA_OPEN_EDITOR, false) ?: false
         val openTracker = intent?.getLongExtra(EXTRA_OPEN_TRACKER, -1L) ?: -1L
         val openSafetyPlan = intent?.getBooleanExtra(EXTRA_OPEN_SAFETY_PLAN, false) ?: false
+        val fromSky = intent?.getBooleanExtra(EXTRA_FROM_SKY, false) ?: false
         setContent {
             // Map the prefs-change flow to a *content-based* snapshot. SettingsRepository.changes()
             // re-emits the same SharedPreferences instance, which collectAsState would dedup — so a
@@ -181,6 +184,7 @@ class MainActivity : FragmentActivity() {
                             openEditor = openEditor,
                             openTracker = openTracker,
                             openSafetyPlan = openSafetyPlan,
+                            openFromSky = fromSky,
                         )
                     }
                 }

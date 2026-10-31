@@ -47,10 +47,20 @@ object TrackerRhythm {
 
         /** No check-ins and no prompt of any kind: the person logs from the tracker. */
         DONT_ASK("none"),
+
+        /**
+         * Asked as a question inside the person's own check-in, at most once a day, and never as a
+         * notification of its own ([CheckInQuestions]). An older version reads the key as
+         * [DEFAULT], which asks nothing.
+         */
+        IN_CHECK_IN("checkin"),
         ;
 
         /** Whether this rhythm ever posts a check-in. */
         val asks: Boolean get() = this == ONCE_A_DAY || this == FEW_A_DAY
+
+        /** Whether this tracker is a question in the person's check-in. It posts nothing. */
+        val inCheckIn: Boolean get() = this == IN_CHECK_IN
 
         companion object {
             val DEFAULT = WHEN_IT_HAPPENS

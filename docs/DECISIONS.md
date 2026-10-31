@@ -101,6 +101,12 @@ answering"* or *"Keep reminding me at these times"*. Kept, the check-in never ea
 a longer wait; it is never more than the person set either, so the invariant holds both ways. The
 answer can be changed wherever the check-ins are set (`ui/components/KeepTimesChoice.kt`).
 
+**A state the person declares is not an inference.** "I'm having a hard time" (#537) is a switch
+only the person flips, for a stretch they choose; nothing suggests it, least of all after a hard
+answer. Its only effect is to ask less: check-ins are posted at least one step quieter
+(`CheckInEngine.duringHardTime`), a check-in asks no extra question, and the Sky opens quiet. A
+check-in kept at its times is untouched, and no notice is sent, because the person already knows.
+
 **Asking for more is the person's, never an inference.** The one way to get repeat reminders is an
 explicit setting, *"nudge me again if I miss one"*, off until the person turns it on. The engine
 may then repeat a check-in within the limits that setting states, and no further. It may quieten

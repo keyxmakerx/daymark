@@ -4,6 +4,7 @@ import com.daymark.app.stats.TrackerRhythm.MINUTES_PER_DAY
 import com.daymark.app.stats.TrackerRhythm.Rhythm
 import com.daymark.app.stats.TrackerRhythm.Window
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -40,6 +41,9 @@ class TrackerRhythmTest {
         // Positive control: a known key still reads back as itself.
         for (rhythm in Rhythm.entries) assertEquals(rhythm, Rhythm.fromKey(rhythm.key))
         assertEquals(setOf(Rhythm.ONCE_A_DAY, Rhythm.FEW_A_DAY), Rhythm.entries.filter { it.asks }.toSet())
+        // A tracker in the check-in is a question, never a notification of its own.
+        assertEquals(setOf(Rhythm.IN_CHECK_IN), Rhythm.entries.filter { it.inCheckIn }.toSet())
+        assertFalse(Rhythm.IN_CHECK_IN.asks)
     }
 
     @Test

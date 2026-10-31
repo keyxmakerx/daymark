@@ -124,21 +124,32 @@ class ReminderScheduler @Inject constructor(
             val pace = currentPace(state, previousOfferedAt, nowMillis)
             announce(state, pace, trial = false)
             state = checkInState.reminders()
-            if (!CheckInEngine.shouldPost(pace, previousOfferedAt, nowMillis)) return
+            // The hard-time switch quietens posting only, never the notices (CheckInEngine.duringHardTime).
+            val posted = if (settings.hardTimeOn(nowMillis)) {
+                CheckInEngine.duringHardTime(pace, setSpacingMillis(), settings.remindersKeepAsSet)
+            } else {
+                pace
+            }
+            if (!CheckInEngine.shouldPost(posted, previousOfferedAt, nowMillis)) return
         }
+
+        // An evening check-in may start in the night sky, if the person chose that (#540). The
+        // notification reads exactly the same either way and never names the Sky (SKY.md §6.6).
+        val hour = Instant.ofEpochMilli(nowMillis).atZone(ZoneId.systemDefault()).hour
+        val fromSky = settings.eveningFromSky && PhrasePool.bandForHour(hour) == PhrasePool.Band.Evening
 
         val openEditor = PendingIntent.getActivity(
             context,
             reminder.id.toInt(),
             Intent(context, MainActivity::class.java)
                 .putExtra(MainActivity.EXTRA_OPEN_EDITOR, true)
+                .putExtra(MainActivity.EXTRA_FROM_SKY, fromSky)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
 
         // One of the fixed, human-written lines, in turn. The draw is blind to how the person
         // seemed: it takes the hour and a counter, and nothing else (stats/PhrasePool.kt).
-        val hour = Instant.ofEpochMilli(nowMillis).atZone(ZoneId.systemDefault()).hour
         val line = PhrasePool.openerForHour(hour, state.rotation)
         checkInState.write(state.copy(rotation = PhrasePool.nextRotation(state.rotation)))
 
@@ -192,6 +203,14 @@ class ReminderScheduler @Inject constructor(
             keepAsSet = settings.remindersKeepAsSet,
         )
     }
+
+    /**
+     * The reminders' pace right now, for the check-in's closing screen: its sky offers are left off
+     * whenever this is anything but as set (`stats/CheckInQuestions.kt`, #538). Reads only; it
+     * announces nothing and writes nothing.
+     */
+    suspend fun paceNow(nowMillis: Long = System.currentTimeMillis()): CheckInEngine.Pace =
+        currentPace(checkInState.reminders(), offerLedger.lastOfferedAt(OfferKind.REMINDER), nowMillis)
 
     /**
      * The shortest spacing between the reminder times the person has switched on, around the clock:

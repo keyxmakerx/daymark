@@ -112,6 +112,41 @@ factor opens a blank goal editor rather than one with the factor filled in: #178
 Entries written on today's date in earlier years, shown under More for you. It is a suggestion group,
 so it can be snoozed or turned off like any other.
 
+### 1.7 The end of a check-in
+
+A new entry, saved, may go on to a short closing step (`stats/CheckInQuestions.kt`,
+`ui/checkin/CheckInCloseScreen.kt`). Editing an old entry never does, and when there is nothing to
+ask or offer the editor closes as it always did.
+
+- **At most one extra question by default**, and never more than the person's own setting (none to
+  three, Settings → Reminders → Your check-in). A question comes only from something the person set
+  up: a tracker set to **In my check-in** (§6.1), or, in the morning, last night's sleep for someone
+  who used the sleep diary in the last two weeks and has not logged last night. The rules engine
+  picks them and never reads the mood value, a note or a score to do it.
+- **A hard mood only shortens it.** After Awful or Bad there is no question and no sky offer; the
+  closing screen leads with **Take a moment** and **My safety plan**. While the person has said they
+  are having a hard time (§1.8) there is no question either.
+- Every question has **Skip**, **Why this question?** and **Stop asking this**, and **Done for
+  today** ends the whole of it. There is no count of questions. A question is asked at most once a
+  day and never for what is already logged. Skipped twice running it rests, every other day and then
+  further apart, never off by itself; answered, it is back at once. Stop asking sets the tracker
+  back to When it happens, or turns the sleep question off.
+- **The closing screen** says "Saved." and offers **Mark this day**, **My safety plan** and, when the
+  engine leaves them in, **See it land** (the new star's birth in the Sky, then straight back) and
+  **Your sky**. The engine can only take those two away: after Awful or Bad, whenever the person's
+  reminders have eased off (one answered check-in puts them back), and See it land during a hard
+  time (#538). Answering more never changes the star.
+
+### 1.8 Having a hard time
+
+**More → Having a hard time** is a switch only the person turns on, for a day, a week or until they
+turn it off (#537). While it is on, reminders and tracker check-ins are posted at least one step
+less often (`CheckInEngine.duringHardTime`), a check-in asks nothing extra and offers no See it
+land, and the Sky opens quiet, on today, without the opening or any flight. Anything kept at its
+times, like a medication, comes as set. It sends no notice and is never suggested, least of all
+after a hard answer; the safety plan sits beside it. Turning it off is one tap there, and the Quiet
+sky toggle still shows the full sky at any time. Nothing is hidden or deleted.
+
 ## 2. Journal
 
 A diary separate from mood notes: a title and a body, not tied to a mood, with its own search. A
@@ -159,7 +194,8 @@ entries, journal pages, thought records (the one practice that keeps its own dat
 project steps done, goals marked reached, and life events. A star's colour is its age; mood moves
 only its halo; a missing day is never drawn. A **life event** is a mark on one day in the person's
 own words, added from the Sky's life-events list or with Mark this day (§1.3); tapping one there
-offers **Mark as hard**, which only its supernova in the sky reads. Any star can be **put away**
+offers **Mark as hard**, which only its supernova in the sky reads. A tracker shown in the sky
+offers **Check-in settings**, its times and easing and nothing else (#539). Any star can be **put away**
 from the sky alone and brought back from its list. A star's card can also give it a name of the
 person's own, put its memory in a place they name (a ringed planet in the sky), or give its day a
 meteor shower each year; a weekly habit with **At a set time** is a pulsar. **Background** makes
@@ -207,6 +243,9 @@ Each tracker has its own **check-ins**, on its own screen, and a new tracker ask
   from day to day. Each sits in its own equal share of the hours, at least half a share from the
   next, and the same day always gets the same times (`stats/TrackerRhythm.kt`).
 - **Don't ask**: no check-ins and no prompt.
+- **In my check-in**: asked as a question after the person checks in, at most once a day, with no
+  notification of its own (§1.7). A yes/no tracker named "Did I get outside today?" is how someone
+  writes a question of their own.
 
 A tracker's check-ins run through the same rules engine as the reminders (§12): unanswered ones
 ease it off with no cap, it is never switched off except by the person, and every change is
@@ -488,6 +527,11 @@ times and has no page, so offer once. Not built: #156.
   person chose and leaves the engine's easing as it was.
 - A reminder's notification, or its **Log now** action, opens a fresh entry. Its line is one of the
   fixed, human-written openers (§13.3), in turn.
+- **Start evening check-ins in your sky** (Settings → Reminders → Your check-in, off until turned
+  on) makes an afternoon or evening reminder open on the night sky with the five faces over it; the
+  check-in ends with the new star landing there. The notification reads exactly the same and never
+  names the Sky, and the app lock still comes first. After Awful or Bad, or during a hard time, it
+  ends on the check-in's own closing screen instead (#540).
 - **Try later** sends one more nudge for that reminder an hour later. **Stop asking** switches that
   reminder off; switching it back on in Settings → Reminders undoes it (#195). Home then says, in
   one quiet line, that the reminder is off and that it was switched off from a notification, with a

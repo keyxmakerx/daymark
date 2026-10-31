@@ -79,13 +79,19 @@ fun EntryEditorScreen(
     onDone: () -> Unit,
     onOfferSupport: () -> Unit = {},
     onTakeAMoment: () -> Unit = {},
+    /** A new check-in goes on to its closing screen: the saved row, its mood, and whether it began in the sky. */
+    onCheckedIn: (entryId: Long, mood: Int, fromSky: Boolean) -> Unit = { _, _, _ -> onDone() },
     viewModel: EntryEditorViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
 
     LaunchedEffect(state.saved) {
         if (state.saved) {
-            if (state.offerSupport) onOfferSupport() else onDone()
+            when {
+                state.offerSupport -> onOfferSupport()
+                state.closeAfter -> onCheckedIn(state.savedId, state.moodLevel, state.fromSky)
+                else -> onDone()
+            }
         }
     }
 

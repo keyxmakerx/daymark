@@ -52,6 +52,7 @@ fun MoreHubScreen(
     onThoughtRecords: () -> Unit,
     onMovement: () -> Unit,
     onSafetyPlan: () -> Unit,
+    onHardTime: () -> Unit,
     onCrisis: () -> Unit,
     onSettings: () -> Unit,
     modifier: Modifier = Modifier,
@@ -69,6 +70,15 @@ fun MoreHubScreen(
             title = "If things feel like too much",
             subtitle = "Your crisis line",
             onClick = onCrisis,
+            modifier = Modifier.fillMaxWidth().padding(bottom = 14.dp),
+        )
+        // The one door to the hard-time switch (#537). It is a place the person goes, never a card
+        // offered to them: nothing in the app suggests it, least of all after a bad answer.
+        HubCard(
+            icon = R.drawable.ic_act_love,
+            title = "Having a hard time",
+            subtitle = "Ask me less for a while",
+            onClick = onHardTime,
             modifier = Modifier.fillMaxWidth().padding(bottom = 14.dp),
         )
         SectionLabel("Track")
