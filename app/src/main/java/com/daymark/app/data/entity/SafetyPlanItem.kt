@@ -56,6 +56,26 @@ enum class SafetyPlanSection(
         prompt = "What it looks like when things start to slip",
         addHint = "Add a warning sign…",
     ),
+    /**
+     * The two lists in the person's own words for running high and running low (#523). They are
+     * read by nobody but the person: no rule, signal or reminder looks at them, nothing is inferred
+     * from them, and no diagnosis is named or asked (`SafetyPlanSignsSourceTest`). Offered together
+     * as one quiet card, never placed as empty sections.
+     */
+    SIGNS_OF_A_HIGH(
+        key = "signs_of_a_high",
+        title = "Signs of a high",
+        prompt = "What you notice when things start to run high",
+        addHint = "Add a sign…",
+        optional = true,
+    ),
+    SIGNS_OF_A_LOW(
+        key = "signs_of_a_low",
+        title = "Signs of a low",
+        prompt = "What you notice when things start to run low",
+        addHint = "Add a sign…",
+        optional = true,
+    ),
     THINGS_THAT_HELP(
         key = "things_that_help",
         title = "Things that help",
@@ -82,7 +102,10 @@ enum class SafetyPlanSection(
         /** Unknown keys (a newer backup, a hand-edited file) are skipped rather than crashing. */
         fun fromKey(key: String): SafetyPlanSection? = entries.firstOrNull { it.key == key }
 
-        /** The three sections offered up front; [REASONS] is opt-in. */
+        /** The three sections offered up front; the signs and [REASONS] are opt-in. */
         val required: List<SafetyPlanSection> = entries.filterNot { it.optional }
+
+        /** The pair offered together, straight after the warning signs. */
+        val signs: List<SafetyPlanSection> = listOf(SIGNS_OF_A_HIGH, SIGNS_OF_A_LOW)
     }
 }

@@ -7,6 +7,9 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Added
+- **"Signs of a high" and "Signs of a low" in your safety plan.** Two optional lists in your own
+  words, offered together after your warning signs. Nothing in Daymark reads them or acts on them;
+  they are there for you (#523).
 - **A Quick Settings tile that opens your safety plan.** Add the **Daymark** tile to Quick
   Settings and it opens your plan, after your phone's unlock and your Daymark PIN. It says only
   "Daymark", so nothing on your lock screen names the plan (#522).

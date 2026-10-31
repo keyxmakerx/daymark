@@ -336,6 +336,11 @@ recommending, never setting, how often the support space is offered: #172.
   *People I can reach* (a name, and optionally who they are), and, only if the person adds it,
   *Reasons I want to stay*. That fourth section is offered as a quiet card ("Optional. Only if you'd
   want it there."), never shown as an empty section on a bad day.
+- **Signs of a high and signs of a low.** Two more optional lists, offered together as one quiet
+  card straight after the warning signs ("Optional. In your own words, for you to read."). Once
+  either has a line in it, that one stays; an empty one is never shown. They are read by the person
+  and nobody else: no rule, signal or reminder looks at them, nothing is inferred from them, and no
+  diagnosis is named or asked (#523).
 - **Read and edit are one screen**, with no save step, so nobody has to find an edit button in a
   hard moment.
 - **The crisis row** shows the person's own saved resource (§7.3) and opens the crisis screen. It
