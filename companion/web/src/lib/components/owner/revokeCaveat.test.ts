@@ -97,6 +97,18 @@ describe('the revoke caveat is the shared constant, not a rewording of it', () =
     expect(reworded).not.toContain('{REVOKE_CAVEAT}')
   })
 
+  it('OwnerAccountPanel states the caveat verbatim beside revoking a command-line credential (#324)', () => {
+    const source = readFileSync(new URL('./OwnerAccountPanel.svelte', import.meta.url), 'utf8')
+    expect(source).toMatch(/import \{ REVOKE_CAVEAT \} from '\.\.\/\.\.\/pairing\/copy'/)
+
+    const markup = markupOf(source)
+    expect(markup).toContain('{REVOKE_CAVEAT}')
+
+    // Control: a stand-in that says it in other words does not pass the same check.
+    const reworded = markupOf('<p>Anything the writer already downloaded stays where it is.</p>')
+    expect(reworded).not.toContain('{REVOKE_CAVEAT}')
+  })
+
   it('pinStore.ts documents forgetAllPins by naming the constant, not restating its wording', () => {
     const source = readFileSync(new URL('../../therapist/pinStore.ts', import.meta.url), 'utf8')
     expect(source).toContain('REVOKE_CAVEAT')

@@ -70,6 +70,7 @@
  * the property holds across tabs as well as within one. The envelope needs no pin of its own:
  * a swapped envelope does not open, and one that opens was sealed under this run's key.
  */
+import { ownerAuthHeaders, type OwnerCredential } from '../owner/account'
 import {
   initCpace,
   cpaceStart,
@@ -216,7 +217,7 @@ export interface OwnerPairingState {
 
 /** Owner touch 1: derive MSGa from the code and post it for the invite. */
 export async function ownerOpenPairing(
-  args: { relRef: string; inviteId: string; code: CanonicalPairingCode; bearerToken: string; baseUrl?: string },
+  args: { relRef: string; inviteId: string; code: CanonicalPairingCode; bearerToken: OwnerCredential; baseUrl?: string },
   doFetch: FetchLike = fetch.bind(globalThis),
 ): Promise<OwnerPairingState> {
   const prs = prsBytes(args.code)
@@ -225,7 +226,7 @@ export async function ownerOpenPairing(
   const start = cpaceStart({ prs, ci: channelIdentifier(args.relRef, args.inviteId), sid }, AD_OWNER)
   const res = await doFetch(`${baseOf(args.baseUrl)}/v1/relations/${encodeURIComponent(args.relRef)}/pairing`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json', authorization: `Bearer ${args.bearerToken}` },
+    headers: { 'content-type': 'application/json', ...ownerAuthHeaders(args.bearerToken) },
     body: JSON.stringify({
       inviteId: args.inviteId,
       sidB64: b64.encode(sid),
@@ -387,7 +388,7 @@ export type OwnerCollectResult =
  * to know the code any more. Writes nothing to the server: approval is a separate, human step.
  */
 export async function ownerCollectPairing(
-  args: { relRef: string; bearerToken: string; pairing: OwnerPairingState; baseUrl?: string },
+  args: { relRef: string; bearerToken: OwnerCredential; pairing: OwnerPairingState; baseUrl?: string },
   doFetch: FetchLike = fetch.bind(globalThis),
 ): Promise<OwnerCollectResult> {
   await initCpace()
@@ -395,7 +396,7 @@ export async function ownerCollectPairing(
   const base = `${baseOf(args.baseUrl)}/v1/relations/${encodeURIComponent(args.relRef)}/pairing/${encodeURIComponent(args.pairing.exchangeId)}`
   const res = await doFetch(base, {
     method: 'GET',
-    headers: { authorization: `Bearer ${args.bearerToken}` },
+    headers: ownerAuthHeaders(args.bearerToken),
   })
   if (res.status !== 200) throw new Error(`pairing read refused (${res.status})`)
   const body = (await res.json()) as { state?: unknown; msgBB64?: unknown; envB64?: unknown }
@@ -474,7 +475,7 @@ export function sealOwnerKeys(isk: Uint8Array, sidB64: string, keys: OwnerKeysPa
 export async function ownerApprovePairing(
   args: {
     relRef: string
-    bearerToken: string
+    bearerToken: OwnerCredential
     exchangeId: string
     enrolTicketB64: string
     /** E2, sealed by sealOwnerKeys under this run's key. Required: the server refuses an approval without it. */
@@ -487,7 +488,7 @@ export async function ownerApprovePairing(
     `${baseOf(args.baseUrl)}/v1/relations/${encodeURIComponent(args.relRef)}/pairing/${encodeURIComponent(args.exchangeId)}/approve`,
     {
       method: 'POST',
-      headers: { 'content-type': 'application/json', authorization: `Bearer ${args.bearerToken}` },
+      headers: { 'content-type': 'application/json', ...ownerAuthHeaders(args.bearerToken) },
       body: JSON.stringify({ enrolTicketB64: args.enrolTicketB64, envB64: args.envB64 }),
     },
   )
@@ -501,12 +502,12 @@ export async function ownerApprovePairing(
  * invitation back. True when the server did it; false when there was nothing left to cancel.
  */
 export async function ownerCancelPairing(
-  args: { relRef: string; bearerToken: string; exchangeId: string; baseUrl?: string },
+  args: { relRef: string; bearerToken: OwnerCredential; exchangeId: string; baseUrl?: string },
   doFetch: FetchLike = fetch.bind(globalThis),
 ): Promise<boolean> {
   const res = await doFetch(
     `${baseOf(args.baseUrl)}/v1/relations/${encodeURIComponent(args.relRef)}/pairing/${encodeURIComponent(args.exchangeId)}/cancel`,
-    { method: 'POST', headers: { authorization: `Bearer ${args.bearerToken}` } },
+    { method: 'POST', headers: ownerAuthHeaders(args.bearerToken) },
   )
   if (res.status === 204) return true
   if (res.status === 410) return false

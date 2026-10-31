@@ -14,6 +14,7 @@
 import { initCrypto } from './crypto'
 import _sodium from 'libsodium-wrappers-sumo'
 import type { ChainHeadResponse } from '../admin/chainHead'
+import { ownerAuthHeaders, type OwnerCredential } from '../owner/account'
 
 export type Channel = 'grants' | 'shares' | 'assignments' | 'gameplans'
 
@@ -90,7 +91,7 @@ export class PortalClient {
   private readonly base: string
   constructor(
     baseUrl: string,
-    private readonly token: string,
+    private readonly token: OwnerCredential,
     /*
      * BOUND, and the binding is load-bearing. A bare `fetch` stored as a default and later invoked
      * as `this.doFetch(...)` arrives with `this` set to this class instance, and Chromium refuses
@@ -106,7 +107,7 @@ export class PortalClient {
   }
 
   private headers(extra: Record<string, string> = {}): Record<string, string> {
-    return { Authorization: `Bearer ${this.token}`, ...extra }
+    return { ...ownerAuthHeaders(this.token), ...extra }
   }
 
   /**

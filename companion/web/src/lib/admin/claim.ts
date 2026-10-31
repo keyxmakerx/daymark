@@ -80,12 +80,12 @@ export function groupSecret(secret: string): string[] {
 
 /**
  * The `otpauth:` URI an authenticator takes. The label names the server's host and the
- * administrator's role, nothing else: several authenticators back their entries up to a cloud
- * account, and an administrator's name is not this server's to put there. SHA1, six digits and 30
+ * role the entry signs in as (the administrator's by default, the owner's for #324), nothing else: several authenticators back their entries up to a cloud
+ * account, and a person's name is not this server's to put there. SHA1, six digits and 30
  * seconds are stated because the server implements exactly those (Totp.kt).
  */
-export function otpauthUri(secretBase32: string, host: string): string {
-  const account = `${host || 'daymark'} (server administrator)`
+export function otpauthUri(secretBase32: string, host: string, role = 'server administrator'): string {
+  const account = `${host || 'daymark'} (${role})`
   const params = new URLSearchParams({
     secret: secretBase32,
     issuer: 'Daymark',

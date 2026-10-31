@@ -46,6 +46,7 @@ import { fingerprint } from '../assignments/crypto'
 import { initShareCrypto, type PublicIdentity, type PinStore } from '../share/pairing'
 import { fromBase64 } from '../share/sharecrypto'
 import { pinOnFirstUse, pendingRotation, recordPin, type PinWrite } from '../therapist/pinStore'
+import { ownerAuthHeaders, type OwnerCredential } from './account'
 
 /** Both keys are raw 32-byte public keys — X25519 for sealing, Ed25519 for signing. */
 export const PUBLIC_KEY_BYTES = 32
@@ -90,8 +91,8 @@ export interface TherapistKeyRecord {
 export interface OwnerEndpoint {
   /** Base URL of the companion server. Empty string means the origin that served this page. */
   baseUrl: string
-  /** The owner's bearer access token — the same one PortalClient sends on every owner call. */
-  token: string
+  /** The owner's credential — the same one PortalClient sends on every owner call (account.ts). */
+  token: OwnerCredential
 }
 
 type FetchLike = typeof fetch
@@ -128,7 +129,7 @@ export async function fetchTherapistKeys(
   await initShareCrypto()
   const base = endpoint.baseUrl.replace(/\/+$/, '')
   const res = await doFetch(`${base}/v1/relations/${encodeURIComponent(relRef)}/therapist-keys`, {
-    headers: { Authorization: `Bearer ${endpoint.token}` },
+    headers: ownerAuthHeaders(endpoint.token),
   })
   if (res.status === 404) return null
   if (res.status === 401 || res.status === 403) {

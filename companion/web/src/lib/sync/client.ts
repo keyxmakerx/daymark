@@ -56,6 +56,7 @@ import {
 } from '../recovery/dataKey'
 import { subkeysFromMaster } from '../recovery/migration'
 import { isLaneLineage } from '../lane/lineage'
+import { ownerAuthHeaders, type OwnerCredential } from '../owner/account'
 
 /**
  * The largest blob a Daymark server stores unless its operator sets DAYMARK_MAX_BLOB_BYTES
@@ -282,7 +283,7 @@ export class SyncClient {
   private keyCache: { tag: string; keys: OwnerKeys } | null = null
   constructor(
     baseUrl: string,
-    private readonly token: string,
+    private readonly token: OwnerCredential,
     private readonly doFetch: FetchLike = fetch.bind(globalThis),
     options: SyncClientOptions = {},
   ) {
@@ -309,7 +310,7 @@ export class SyncClient {
   }
 
   private headers(extra: Record<string, string> = {}): Record<string, string> {
-    return { Authorization: `Bearer ${this.token}`, ...extra }
+    return { ...ownerAuthHeaders(this.token), ...extra }
   }
 
   private async req(path: string, init: RequestInit = {}): Promise<Response> {
