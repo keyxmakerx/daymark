@@ -452,13 +452,17 @@ of dust nearer, dimming what is behind them; and, nearest, gas, already there at
 strength at the whole sky, because it is the one part of the space with detail in it, and whole
 once the view is past about eighteen screen widths across. Each layer grows
 less and slides less than the stars as the view moves, by how far back it is, so the sky reads as
-deep rather than as paint. The gas is lit along its edges and shadowed in its thick parts, so it
-reads as a volume, and it is lit by the eight stars nearest the middle of the screen, each in its
-own colour, a light easing out before the next one takes its place. A star's light reaches a few
-memories' steps and never more than half the screen, so right in, a sun lights the gas round it
-and the rest keeps its colour. The brightest light at a point
-wins rather than all of them adding up, so a crowd of stars lights the gas no more than one star
-does. It draws no star and no point of light (§D11), and while Motion is on it drifts very slowly.
+deep rather than as paint. The gas is lit along its edges and shadowed in its thick parts, the
+inside of a thick mass gets less light than its rim, and gas lying between a point and the light
+shades that point, so a cloud has a lit side and a shadowed one and reads as a volume. It is lit
+by the eight stars nearest the middle of the screen, each in its own colour, a light easing out
+before the next one takes its place. A star's light reaches about sixteen of its own widths as
+drawn, a little further for a bright star, and never more than three tenths of the screen, falling
+away about as the square of the distance, so a star lights only the gas near it. The stars' light
+at a point is added together, its colour and direction weighted by how much of each arrives, and
+the total is capped, so where one star's light meets another's nothing jumps and a crowd of stars
+lights the gas little more than one bright star does. No light in it is ever negative (#535). It
+draws no star and no point of light (§D11), and while Motion is on it drifts very slowly.
 Two allowed colours can mix to a green, so the last thing the shader does is hold every pixel's
 green to no more than its red or its blue. Below Android 13, or on a device whose graphics will
 not compile the shader, the space is the three soft glows instead, and nothing that carries meaning

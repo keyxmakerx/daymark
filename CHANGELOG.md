@@ -32,6 +32,10 @@ All notable changes to this project are documented here. The format is based on
   feel like too much**, which always leads to the crisis screen (#482).
 
 ### Changed
+- **The sky's gas has depth.** A star now lights only the gas close to it, by its own size and
+  brightness; thick gas is darker inside than at its rim, and clouds have a lit side and a shadowed
+  one. Where two stars' light meets there is no longer a hard edge, and the gas has no holes or
+  hard blue patches on phones that drew them (#535).
 - **Stars look like stars.** Each one is a sharp point of light: a white-hot heart in its own
   colour, paled toward white, with a tight wing of light round it the way a star's light spreads in
   the eye, and no rays, spikes, hard edge or grey disc round it. A life event is still the one

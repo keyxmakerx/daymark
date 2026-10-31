@@ -525,6 +525,7 @@ private fun SkySpace(
     clock: State<Long>,
 ) {
     val down = SkyShaders.SPACE_DOWN
+    val pxPerDp = LocalDensity.current.density
     val spaceSeed = remember(seed) { SkyShaders.spaceSeed(seed) }
     val tick by remember(clock) { derivedStateOf { clock.value / SPACE_TICK_MILLIS } }
     val chosen = remember { IntArray(SkyShaders.LIGHTS) }
@@ -564,7 +565,15 @@ private fun SkySpace(
                     val ageYears = SkyAge.ageYears(sky.epochDay[i], todayEpochDay)
                     lights[k * 4] = SkyPresentation.toScreen(xs[i], left, scale, panX) / down
                     lights[k * 4 + 1] = SkyPresentation.toScreen(ys[i], top, scale, panY) / down
-                    lights[k * 4 + 2] = SkyShaders.gasLightReach(scale / down, size.width)
+                    // The star as it is drawn: its point of light, or its sun once that is bigger.
+                    val drawnPx = maxOf(
+                        SkyGlyph.coreRadiusDp(kind, sky.moodLevel[i]) * SkyGlyph.coreScale(kind) *
+                            SkyGlyph.zoomScale(camera.screenWidthsAcross) * pxPerDp,
+                        SkyPresentation.sunRadius(kind, scale),
+                    )
+                    val bright = SkyGlyph.coreScale(kind) *
+                        SkyGlyph.magnitudeAlpha(kind, SkyTwinkle.identityIdAt(sky, i), quiet = false, sun = 0f)
+                    lights[k * 4 + 2] = SkyShaders.gasLightReach(drawnPx / down, bright, pxPerDp / down, size.width)
                     lights[k * 4 + 3] = weights[k] * SkyGlyph.starBrightness(kind, ageYears, sky.moodLevel[i])
                     tints[k] = SkyGlyph.starTint(
                         kind,

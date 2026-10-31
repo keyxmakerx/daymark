@@ -97,19 +97,20 @@ class SkyShadersTest {
     }
 
     @Test
-    fun `a crowd of stars lights the gas no more than one does`() {
-        // In the shader the brightest light at a point wins and the rest are passed over, so how
-        // many stars there are never adds up to more light: a busy stretch of the sky is not a
-        // brighter one. Every light after the first is taken only if it is brighter.
+    fun `a crowd of stars lights the gas little more than one bright star does`() {
+        // Every nearby star's light is added, so where one star's light hands over to the next
+        // nothing jumps (#535), and the total is capped, so a busy stretch of the sky is not a much
+        // brighter one: the cap is a bright star's light and a little more.
         val space = SkyShaders.SPACE
-        val wins = Regex("""if \(l\.a > best\.a\) best = l;""").findAll(space).count()
-        assertEquals("the lights are no longer combined by the brightest one winning", SkyShaders.LIGHTS - 1, wins)
-        val sums = Regex("""best\s*\+=|\+=\s*starlight""")
-        assertFalse("the lights add up", sums.containsMatchIn(space))
-        // The control: a shader that adds the lights is seen.
-        val adding = space.replaceFirst("if (l.a > best.a) best = l;", "best += l;")
-        assertNotEquals("the planted sum did not change the shader", space, adding)
-        assertTrue("the sum check cannot see lights adding up", sums.containsMatchIn(adding))
+        fun capped(src: String) = Regex("""float amount = min\(la, LIGHT_CAP\);""").containsMatchIn(src) &&
+            Regex("""tint \* amount \*""").containsMatchIn(src) && !Regex("""\bla \* lum""").containsMatchIn(src)
+        assertTrue(capped(space))
+        val cap = Regex("""const float LIGHT_CAP = ([0-9.]+);""").find(space)!!.groupValues[1].toFloat()
+        assertTrue("the cap lets a crowd far outshine one star", cap <= 1.5f)
+        // The control: the light used uncapped is seen.
+        val uncapped = space.replaceFirst("tint * amount *", "tint * la * lum * 0.0 + tint * amount *").replaceFirst("float amount = min(la, LIGHT_CAP);", "float amount = la;")
+        assertNotEquals(space, uncapped)
+        assertFalse(capped(uncapped))
     }
 
     // -------------------------------------------------------------------------------------------
@@ -242,18 +243,47 @@ class SkyShadersTest {
     }
 
     @Test
-    fun `close in a star lights the gas round it, never the whole screen evenly`() {
+    fun `a star lights only the gas near it, by its own size and brightness`() {
         val width = 270f
-        // Far out the reach is the sky's own few memories' steps, growing with the zoom.
-        val far = SkyShaders.gasLightReach(2_000f, width)
-        assertEquals(SkyShaders.GAS_LIGHT_REACH * 2_000f, far, 1e-4f)
-        assertTrue(SkyShaders.gasLightReach(4_000f, width) > far)
-        // Close in it is held to half the screen, however much closer the view comes.
-        for (scale in listOf(20_000f, 200_000f, 2_000_000f)) {
-            assertEquals(SkyShaders.GAS_LIGHT_MOST * width, SkyShaders.gasLightReach(scale, width), 1e-4f)
+        val dp = 0.75f
+        // A point of light reaches a few dozen of its own widths, a bright one a little further.
+        val small = SkyShaders.gasLightReach(2f, 1f, dp, width)
+        assertEquals(2f * SkyShaders.GAS_LIGHT_WIDTHS, small, 1e-4f)
+        assertTrue(SkyShaders.gasLightReach(2f, 2f, dp, width) > small)
+        assertTrue(SkyShaders.gasLightReach(4f, 1f, dp, width) > small)
+        // The faintest still reaches a wisp; none reaches across the screen, however close the view.
+        assertEquals(SkyShaders.GAS_LIGHT_LEAST_DP * dp, SkyShaders.gasLightReach(0.01f, 0f, dp, width), 1e-4f)
+        for (radius in listOf(100f, 1_000f, 100_000f)) {
+            assertEquals(SkyShaders.GAS_LIGHT_MOST * width, SkyShaders.gasLightReach(radius, 2f, dp, width), 1e-4f)
         }
-        // Control: without the hold, the closest view's light would be far wider than the screen.
-        assertTrue(SkyShaders.GAS_LIGHT_REACH * 2_000_000f > 10f * width)
+        // Control: unheld, the biggest sun's light would be far wider than the screen.
+        assertTrue(100_000f * SkyShaders.GAS_LIGHT_WIDTHS > 10f * width)
+    }
+
+    /**
+     * pow of a negative base is undefined, and phone GPUs answer it with holes in the gas (#535).
+     * Every pow in both shaders takes a base that is a constant, a clamp, a max, or a value its own
+     * line shows cannot be negative.
+     */
+    @Test
+    fun `no pow is handed a base that can go negative`() {
+        val safe = Regex("""^\s*(max\(|clamp\(|mu\b|1\.0 - mu\b)""")
+        fun unsafe(source: String): List<String> = Regex("""pow\(""").findAll(source).map { m ->
+            source.substring(m.range.last + 1).takeWhile { it != '\n' }
+        }.filterNot { safe.containsMatchIn(it) }.toList()
+        for ((name, source) in listOf("SPACE" to SkyShaders.SPACE, "SUN" to SkyShaders.SUN)) {
+            assertEquals("$name", emptyList<String>(), unsafe(source))
+        }
+        assertEquals(1, unsafe("float f = pow(1.0 - abs(n * 2.0 - 1.0), 10.0);").size)
+    }
+
+    /** Every nearby star's light is added, never the brightest picked, so no hand-over draws an edge. */
+    @Test
+    fun `the gas adds its stars' light together`() {
+        val space = SkyShaders.SPACE
+        assertEquals(SkyShaders.LIGHTS, Regex("""addLight\(p, uLight\d, uLightTint\d, lc, la, lw\);""").findAll(space).count())
+        assertFalse(space.contains("if (l.a > best.a)"))
+        assertTrue(space.contains("min(la, LIGHT_CAP)"))
     }
 
     @Test
