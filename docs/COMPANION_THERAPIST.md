@@ -287,6 +287,28 @@ So the protection is the **patient's own Revoke**, which stops future delivery o
 shows who has standing access, with Revoke beside it, on every owner screen. The practice console's
 remove-member confirmation says removal ends a standing in the practice and nobody's relationship.
 
+## 9b. Which kind of clinician
+
+The console asks **I work as a** Therapist, Psychologist or Psychiatrist, and remembers the answer in
+this browser (`companion/web/src/lib/therapist/discipline.ts`). It changes the console's arrangement
+and nothing it can read: the read tabs still sit behind the client's grant. A therapist's tabs lead
+with Today and the Calendar, a psychologist's with the Record of self-checks over time, and a
+psychiatrist's with Today, where sleep sits beside mood. The Timers tab leads with each one's own
+preset: a session, an assessment or a medication review. Not built: a Medication tab for the
+psychiatrist, because medication records are not part of a share yet (#542).
+
+## 9c. Session timers
+
+The console's **Timers** tab runs timers for sessions, breaks and the time between, with presets
+(Session 50 minutes, Medication review 25, Assessment 110, Break 10, Writing notes 10) and a timer of
+the clinician's own, each with an optional nudge before the end. Each tells the clinician in the way
+they chose: a chime, a buzz on a phone that can vibrate, a browser notification that a watch
+mirroring the device shows as a tap, or a banner only. The banner shows for every style, on every
+tab, and says what happened instead when the device could not chime, buzz or notify. A timer runs
+against the wall clock, so a hidden tab still ends it on time (`companion/web/src/lib/timers/timers.ts`).
+Timers stay in the browser: nothing is sent to the server, and no timer names or reads a client.
+No grant is needed for them.
+
 ## 10. The audit log
 
 See [COMPANION_SECURITY.md](COMPANION_SECURITY.md) §9: events, never content; owner-readable only;

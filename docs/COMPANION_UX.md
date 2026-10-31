@@ -155,23 +155,29 @@ no longer works (#407).
 1. A backup open in the viewer, or in the owner console's Review tab, shows a **Calendar** card in the
    dashboard: one month, Monday first, read-only (#335). It is drawn only on the person's own data; the
    clinician has a calendar of their own, which draws no mood's colour.
-2. Every day is the same square with its number in ink. A check-in is a small square in its mood's
+2. The month is the Chronicle calendar from the signed-off design: one soft card with a faint light in
+   its corner, the month's name large in the display serif, an open grid of hairlines, and each date
+   in a circle, filled in ink for today. Every day is the same cell with its number in ink. A check-in is a small square in its mood's
    colour — the person's own where they chose one — with the mood's word beside it, in the order made;
    at most six a day, keeping one of every mood the day holds, and never a count. A journal entry is a
    ring, a sleep log a bar, a self-check a diagonal slash, each once however many the day holds. A day
    with nothing on it is the same square with no marks: nothing dimmer, dotted, struck or counted. No
    average, best or worst day, count, arrow or tick.
-3. **Previous month**, **Today** and **Next month** change month. Not built: a year view, #379.
-4. Choosing a day lists its records in the panel beside the grid, the calendar in words (#259): each
+3. **‹** (Previous month), **Today** and **›** (Next month) change month, fading from one to the
+   next, and not at all when the person asks for less motion. Not built: a year view, #379.
+4. Choosing a day opens its card from that day, the calendar in words (#259): beside the day on a
+   wide screen, above or below it on a narrow one, with the rest of the month faded back. Focus moves
+   to the card's date; Escape, the close button or a click anywhere else closes it and returns focus
+   to the day. The card lists each
    record's kind and time (a sleep log's bed and wake times), a check-in's mood word, a self-check's
-   name and band word. No self-check total: the phone's own view of a day shows none. Before a day is
-   chosen the panel says *"Choose a day to see what was recorded on it."*; a day with nothing says
-   *"Nothing recorded."*
+   name and band word. No self-check total: the phone's own view of a day shows none. Under the
+   month's name the card says *"Choose a day to see what was recorded on it."*; a day with nothing
+   says *"Nothing recorded."*
 5. A screen reader hears each day as its date, then each mark in the order drawn — *"Wed 16 Sep 2026:
    check-in Good, check-in Meh, journal"* — with *", today"* after today's date, and *"nothing
    recorded"* for a day with nothing on it.
 6. **Print this month** prints the month alone, ink on white whatever the screen's theme, every square
-   beside its word; the day panel, the controls and the rest of the page stay off the paper.
+   beside its word; the day card, the controls and the rest of the page stay off the paper.
 
 ### 7.12 Pairing a phone (owner)
 

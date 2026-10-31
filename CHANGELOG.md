@@ -7,6 +7,21 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Added
+- **An invitation can be shown as a code.** After you create an invite link for a clinician, **Show
+  as a code** draws it as a QR code, so a clinician in the room can open it with their phone's
+  camera instead of being sent the link. The screen says that anyone who can see it can open it,
+  and the fingerprint words are still what prove it's them.
+- **The clinician console knows whether you're a therapist, a psychologist or a psychiatrist.**
+  Pick one under **I work as a**, and the tabs lead with what that work reaches for first: today
+  and the calendar, the record of self-checks, or today with sleep beside mood. Timers lead with
+  your own kind of appointment. It never changes what you can read; that still comes only from
+  what the client shares.
+- **Clinicians can run session timers in the Companion.** The clinician console has a **Timers**
+  tab with presets for a session, a medication review, an assessment, a break and writing notes,
+  or a timer of your own, each with an optional nudge before the end. Each one tells you the way
+  you choose: a soft chime, a buzz on a phone, a notification your watch can show as a tap, or a
+  quiet banner. The banner always shows, on every tab, and says so when the device couldn't chime,
+  buzz or notify. Timers stay in the browser and never name a client.
 - **You can call your crisis line from the app.** Once you've said the line is right for you, the
   crisis screen has a **Call** button, and **Text** where the line takes texts. Each opens your
   phone's own dialer or messages app with the number filled in; Daymark never places a call. The
@@ -15,6 +30,10 @@ All notable changes to this project are documented here. The format is based on
   feel like too much**, which always leads to the crisis screen (#482).
 
 ### Changed
+- **Your month in the Companion is the calmer Chronicle calendar.** It's one soft card with the
+  month's name in large type, an open grid, and today's date filled in. Pressing a day opens its card
+  right from that day, and the rest of the month fades back. Escape, the × or a click anywhere else
+  closes it. Changing month fades gently, or not at all if you've asked your device for less motion.
 - **Stars look like stars.** Each one is a sharp point of light: a white-hot heart in its own
   colour, paled toward white, with a tight wing of light round it the way a star's light spreads in
   the eye, and no rays, spikes, hard edge or grey disc round it. A life event is still the one
