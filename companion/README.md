@@ -95,11 +95,22 @@ A server serves one owner. Never give its token to a second person: whoever hold
 download every encrypted copy on the server and push a newer version of each. Each stored journal
 belongs to one owner (#219); several people's journals on one server: not built, #318.
 
-The decided design replaces the shared token (#208): each person signs in with an account of their
-own, a new server is claimed with a one-time code from its own log, and access comes back by proving
-the owner's own key, never by email. The server console already works this way: it is claimed with
-the setup code a new server prints to its log, and its administrator signs in as themselves (#322).
-Not built for the rest: #324, #325.
+## Your own sign-in, which retires the token
+
+Once connected with the token, the owner console offers **Make your own sign-in**: a name, a key for
+an authenticator app, and the six digits it shows. The account takes the owner's existing id, so
+every stored copy and every paired phone stays theirs. From then on the token signs nobody in, the
+owner page asks for the name and six digits, and email recovery is switched off (#324). Changing
+`DAYMARK_AUTH_TOKEN` after that and restarting disconnects no phone and signs nobody in.
+
+The command-line writer then needs a credential of its own, made in the console's server
+connection panel: it can read and write snapshots and nothing else, and it is set as
+`DAYMARK_CLI_TOKEN`. Each one can be revoked there.
+
+The decided design goes further (#208): a new server is claimed with a one-time code from its own
+log, and access comes back by proving the owner's own key, never by email. The server console
+already works this way (#322). Not built for the owner: claiming with a setup code, and recovery by
+key, #325.
 
 ## Health checks
 
@@ -162,13 +173,14 @@ None of this is observable from a web page, so it is a list to check by hand:
 ## Push a backup from your laptop
 
 Without the phone's `sync` build, the command-line writer encrypts an exported Daymark backup with your sync
-passphrase and uploads it as the next append-only version. The passphrase and the server's access
-token are both read from the environment, never from the command line, where other users of the
-machine could read them. The wire format is [`../docs/SYNC_PROTOCOL.md`](../docs/SYNC_PROTOCOL.md).
+passphrase and uploads it as the next append-only version. The passphrase and the credential are
+both read from the environment, never from the command line, where other users of the machine could
+read them: the credential is `DAYMARK_CLI_TOKEN`, made in the owner console, or, on a server still
+using its shared access token, `DAYMARK_AUTH_TOKEN`. The wire format is [`../docs/SYNC_PROTOCOL.md`](../docs/SYNC_PROTOCOL.md).
 
 ```bash
 cd companion/web && pnpm install
-DAYMARK_SYNC_PASSPHRASE='your sync passphrase' DAYMARK_AUTH_TOKEN='your server access token' \
+DAYMARK_SYNC_PASSPHRASE='your sync passphrase' DAYMARK_CLI_TOKEN='your command-line credential' \
   pnpm --silent push -- --server http://localhost:8080 --lineage laptop \
                        --backup ~/Downloads/daymark-backup.json
 ```

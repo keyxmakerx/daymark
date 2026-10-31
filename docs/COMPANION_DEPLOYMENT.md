@@ -236,7 +236,7 @@ read from a file named by `NAME_FILE`, which wins.
 | `DAYMARK_WEB_DIR` | `web` (the image sets `/app/web`) | The built consoles |
 | `DAYMARK_BASE_PATH` | `/` | Sub-path prefix; not supported yet (§3.1, requirement 6) |
 | `DAYMARK_LOG_LEVEL` | `info`, in the code, the image, compose and `.env.example` | Level of the app's own loggers. `warn` hides the startup settings line, the SMTP-enabled line and `readiness restored` (COMPANION_OBSERVABILITY.md §2.4) |
-| `DAYMARK_AUTH_TOKEN` (`_FILE`) | unset | The owner's bearer token. Unset: the sync API, owner routes, recovery and the clinician portal all answer 503 |
+| `DAYMARK_AUTH_TOKEN` (`_FILE`) | unset | The owner's bearer token, until the owner makes their own sign-in, after which it signs nobody in (COMPANION_SECURITY.md §5.9). Unset: the sync API, owner routes, recovery and the clinician portal all answer 503 |
 | `DAYMARK_SETUP_MODE` | unset | `solo`, `paired` or `practice`, in any case: the shape, and so which routes, pages and stores the server serves (§0). Unset or blank, the server assumes one from `DAYMARK_THERAPIST_AUTH` and logs which. Any other value stops the server at start (§5.3) |
 | `DAYMARK_THERAPIST_AUTH` | off | The switch `DAYMARK_SETUP_MODE` replaces; `1` or `true` is on, anything else off. With no mode it decides the shape: on is `practice`, off is `solo`. Beside a mode, leave it out or set it to agree (§5.3) |
 | `DAYMARK_PUBLIC_BASE_URL` | first `DAYMARK_WEBAUTHN_ORIGINS` entry | The external origin every link the server hands out is built on: an absolute `http` or `https` address with a host and no user name, query or fragment. Required in the `paired` and `practice` shapes and while SMTP is on (§5.3). A phone pairs only while it is `https` (§3.4) |
@@ -569,8 +569,8 @@ check that a real email arrives (#207).
 
 1. `cp .env.example .env` in `companion/`; set `DAYMARK_DOMAIN`, and set `DAYMARK_SETUP_MODE` to
    what this machine is for (§0). The example says `solo`.
-2. Create the bearer token (§5.2). By decision, each person's own account replaces this step
-   (#208); not built: #324.
+2. Create the bearer token (§5.2). Connect the owner console with it once and choose **Make your own
+   sign-in**; the token then signs nobody in. Starting with no token at all: not built, #208.
 3. Pick the topology (§1) and start: `docker compose up -d --build`, adding the override if your proxy
    is a container.
 4. Configure your proxy (§3), set `DAYMARK_TRUSTED_PROXIES` (§4.0), and restart.

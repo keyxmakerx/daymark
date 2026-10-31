@@ -7,6 +7,13 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Added
+- **Companion: you can sign in as yourself instead of with the server's shared access token.**
+  Connect the owner console with the token once and choose **Make your own sign-in**: a name and an
+  authenticator app. Everything already on the server stays yours and your paired phones keep
+  working; after that the token opens nothing, and the owner page asks for your name and six digits.
+  The command-line writer gets a credential of its own from the console, set as `DAYMARK_CLI_TOKEN`,
+  which can only read and write backups and can be revoked there. Email recovery is switched off
+  once your sign-in is made (#324).
 - **You can call your crisis line from the app.** Once you've said the line is right for you, the
   crisis screen has a **Call** button, and **Text** where the line takes texts. Each opens your
   phone's own dialer or messages app with the number filled in; Daymark never places a call. The
