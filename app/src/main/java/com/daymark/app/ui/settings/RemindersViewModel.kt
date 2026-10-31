@@ -19,8 +19,31 @@ import javax.inject.Inject
 class RemindersViewModel @Inject constructor(
     private val repository: ReminderRepository,
     private val scheduler: ReminderScheduler,
-    settings: SettingsRepository,
+    private val settings: SettingsRepository,
 ) : ViewModel() {
+
+    /** The check-in's own choices (`stats/CheckInQuestions.kt`, #540), read once and written through. */
+    data class CheckIn(val questionsAllowed: Int, val sleepQuestion: Boolean, val eveningFromSky: Boolean)
+
+    private val _checkIn = MutableStateFlow(
+        CheckIn(settings.checkInQuestionsAllowed, settings.sleepQuestionOn, settings.eveningFromSky),
+    )
+    val checkIn: StateFlow<CheckIn> = _checkIn.asStateFlow()
+
+    fun setQuestionsAllowed(n: Int) {
+        settings.checkInQuestionsAllowed = n
+        _checkIn.value = _checkIn.value.copy(questionsAllowed = settings.checkInQuestionsAllowed)
+    }
+
+    fun setSleepQuestion(on: Boolean) {
+        settings.sleepQuestionOn = on
+        _checkIn.value = _checkIn.value.copy(sleepQuestion = on)
+    }
+
+    fun setEveningFromSky(on: Boolean) {
+        settings.eveningFromSky = on
+        _checkIn.value = _checkIn.value.copy(eveningFromSky = on)
+    }
 
     private val _keepAsSet = MutableStateFlow(settings.remindersKeepAsSet.takeIf { settings.remindersKeepAnswered })
 

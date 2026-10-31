@@ -10,6 +10,7 @@
  */
 import type { AuditEvent } from '../sync/portal'
 import { ownerLogActionLabel } from '../components/owner/auditLabels'
+import { ownerAuthHeaders, type OwnerCredential } from '../owner/account'
 
 export type OwnerLogFault = 'unreachable' | 'refused' | 'unsupported'
 
@@ -75,7 +76,7 @@ function asEvent(x: unknown): AuditEvent | null {
 /** One page of the owner's log, newest first; [before] continues from a previous page's cursor. */
 export async function fetchOwnerLog(
   serverUrl: string,
-  token: string,
+  token: OwnerCredential,
   before: number | null = null,
   doFetch: FetchLike = fetch.bind(globalThis),
 ): Promise<OwnerLogPage> {
@@ -85,7 +86,7 @@ export async function fetchOwnerLog(
   let res: Response
   try {
     res = await doFetch(`${base}/v1/owner/audit?${params}`, {
-      headers: { Authorization: `Bearer ${token}` },
+      headers: ownerAuthHeaders(token),
       cache: 'no-store',
     })
   } catch {

@@ -70,6 +70,30 @@
                 android:name="android.appwidget.provider"
                 android:resource="@xml/tracker_widget_info" />
         </receiver>
+        <!-- Serves one file only, the background the person just made from their sky, to the
+             wallpaper picker they chose, for reading (#534). Not exported: access is granted per
+             link. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.background"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/background_paths" />
+        </provider>
+        <!-- Labelled with the app's name only, because Quick Settings shows on the lock screen
+             (#522). It opens the safety plan behind the phone's unlock and the app's PIN. -->
+        <service
+            android:name=".tile.SafetyPlanTileService"
+            android:exported="true"
+            android:icon="@drawable/ic_tile_daymark"
+            android:label="@string/app_name"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+        </service>
     </application>
 
 </manifest>

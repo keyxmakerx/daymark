@@ -64,7 +64,10 @@
     }
     working = true
     try {
-      const client = new PortalClient(baseUrl, fetchImpl ?? fetch)
+      // With no fetch injected, PortalClient's own default (the global fetch bound to globalThis)
+      // is used. Handing it the bare global instead is refused by every browser as an illegal
+      // invocation, and by no test runner (#494).
+      const client = fetchImpl ? new PortalClient(baseUrl, fetchImpl) : new PortalClient(baseUrl)
       const result = await client.loginTotp(memberId.trim(), code.trim())
       // The code is cleared whatever happened. A TOTP step is single-use on the server, so a code
       // left in the field after a refusal is only ever going to be refused again — and leaving it

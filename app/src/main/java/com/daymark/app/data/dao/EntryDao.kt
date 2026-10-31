@@ -69,6 +69,14 @@ interface EntryDao {
     @Query("SELECT COUNT(*) FROM mood_entries")
     suspend fun count(): Int
 
+    /** When the first entry was made, or null with none: whether the report's gap comparison has a whole window (#520). */
+    @Query("SELECT MIN(dateTime) FROM mood_entries")
+    suspend fun firstDateTime(): Long?
+
+    /** Only the times, never a note or a mood: the report's gap comparison needs which days have an entry (#520). */
+    @Query("SELECT dateTime FROM mood_entries WHERE dateTime BETWEEN :from AND :to")
+    suspend fun dateTimesBetween(from: Long, to: Long): List<Long>
+
     // --- Backup / restore ---
 
     @Query("SELECT * FROM mood_entries")

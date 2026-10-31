@@ -3,16 +3,23 @@ package com.daymark.app.ui.support
 import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.net.Uri
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -23,9 +30,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import com.daymark.app.data.CrisisLineDirectory
 import com.daymark.app.data.CrisisStore
 import com.daymark.app.ui.components.DaymarkSwitch
 import com.daymark.app.ui.components.SentenceCaps
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 
 /**
  * The fields that set a crisis line, the same in onboarding, on Home's one-time check and on the
@@ -79,13 +90,83 @@ class CrisisLineDraft(from: CrisisStore.Resource?) {
 @Composable
 fun rememberCrisisLineDraft(from: CrisisStore.Resource?): CrisisLineDraft = remember { CrisisLineDraft(from) }
 
+/**
+ * Fills the draft from a line in the bundled list (#521). It fills in the fields and nothing else:
+ * the person still reads them, can change any of them, and saves as if they had typed them.
+ */
+fun CrisisLineDraft.fillFrom(line: CrisisLineDirectory.Line) {
+    label = line.label
+    contact = line.contact
+    number = line.number
+    takesTexts = line.takesTexts
+}
+
 @Composable
-fun CrisisLineFields(draft: CrisisLineDraft) = CrisisLineFields(
-    label = draft.label, onLabel = { draft.label = it },
-    contact = draft.contact, onContact = { draft.contact = it },
-    number = draft.number, onNumber = { draft.number = it },
-    takesTexts = draft.takesTexts, onTakesTexts = { draft.takesTexts = it },
-)
+fun CrisisLineFields(draft: CrisisLineDraft) {
+    var picking by remember { mutableStateOf(false) }
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        TextButton(onClick = { picking = true }, modifier = Modifier.fillMaxWidth()) {
+            Text("Pick from a list of national lines")
+        }
+        CrisisLineFields(
+            label = draft.label, onLabel = { draft.label = it },
+            contact = draft.contact, onContact = { draft.contact = it },
+            number = draft.number, onNumber = { draft.number = it },
+            takesTexts = draft.takesTexts, onTakesTexts = { draft.takesTexts = it },
+        )
+    }
+    if (picking) {
+        CrisisLinePicker(
+            onPick = { draft.fillFrom(it); picking = false },
+            onDismiss = { picking = false },
+        )
+    }
+}
+
+/**
+ * The bundled list, in its own fixed order. Nothing about the phone (region, SIM, language,
+ * location) chooses, sorts or highlights an entry: the person finds their country (FEATURES §7.3).
+ * The list says when it was last checked, because a number can change after it was written down.
+ */
+@Composable
+private fun CrisisLinePicker(onPick: (CrisisLineDirectory.Line) -> Unit, onDismiss: () -> Unit) {
+    val checkedOn = LocalDate.parse(CrisisLineDirectory.CHECKED_ON).format(DateTimeFormatter.ofPattern("d MMMM yyyy", Locale.ENGLISH))
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("National crisis lines") },
+        text = {
+            Column(
+                Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                for (line in CrisisLineDirectory.lines) {
+                    Column(
+                        Modifier
+                            .fillMaxWidth()
+                            .clickable { onPick(line) }
+                            .padding(vertical = 10.dp),
+                    ) {
+                        Text(line.country, style = MaterialTheme.typography.titleSmall)
+                        Text(
+                            line.label + " · " + line.contact,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+                Text(
+                    "This list was last checked on " + checkedOn + ". " +
+                        "You can change anything it fills in before you save.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 8.dp),
+                )
+            }
+        },
+        confirmButton = {},
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Close") } },
+    )
+}
 
 /**
  * Call, and Text where the line takes texts. Each opens the person's own phone or messages app

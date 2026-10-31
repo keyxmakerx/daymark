@@ -26,6 +26,7 @@ import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -54,6 +55,7 @@ import com.daymark.app.data.entity.Reminder
 import com.daymark.app.notifications.NotificationPermission
 import com.daymark.app.ui.components.KeepTimesChoice
 import com.daymark.app.ui.components.PaperSurface
+import com.daymark.app.stats.CheckInQuestions
 import com.daymark.app.ui.components.SentenceCaps
 import com.daymark.app.util.DateUtils
 import java.time.LocalDateTime
@@ -67,6 +69,7 @@ fun RemindersScreen(
 ) {
     val reminders by viewModel.reminders.collectAsStateWithLifecycle()
     val keepAsSet by viewModel.keepAsSet.collectAsStateWithLifecycle()
+    val checkIn by viewModel.checkIn.collectAsStateWithLifecycle()
 
     // Edit target: null = none, a Reminder = editing, Reminder(id=0) = adding a new one.
     var editing by remember { mutableStateOf<Reminder?>(null) }
@@ -127,6 +130,7 @@ fun RemindersScreen(
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                CheckInCard(checkIn, viewModel, modifier = Modifier.padding(top = 24.dp))
             }
         } else {
             LazyColumn(
@@ -160,6 +164,7 @@ fun RemindersScreen(
                         onDelete = { viewModel.delete(reminder) },
                     )
                 }
+                item { CheckInCard(checkIn, viewModel) }
             }
         }
     }
@@ -178,6 +183,66 @@ fun RemindersScreen(
                 editing = null
             },
         )
+    }
+}
+
+/**
+ * What a check-in may ask after the mood, and where the evening one starts. The number is the
+ * ceiling the rules engine keeps to (`stats/CheckInQuestions.kt`); it may ask fewer, never more.
+ * Starting in the sky is off until the person turns it on (#540), and the notification reads the
+ * same either way.
+ */
+@Composable
+private fun CheckInCard(
+    checkIn: RemindersViewModel.CheckIn,
+    viewModel: RemindersViewModel,
+    modifier: Modifier = Modifier,
+) {
+    PaperSurface(modifier = modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text("Your check-in", style = MaterialTheme.typography.titleSmall)
+            Text(
+                "After the mood, a check-in can ask about a tracker you put in it, or last night's sleep. " +
+                    "Every question can be skipped.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Extra questions, at most", modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+                OutlinedButton(
+                    onClick = { viewModel.setQuestionsAllowed(checkIn.questionsAllowed - 1) },
+                    enabled = checkIn.questionsAllowed > CheckInQuestions.ALLOWED.first,
+                ) { Text("Fewer") }
+                Text(checkIn.questionsAllowed.toString(), style = MaterialTheme.typography.titleMedium)
+                OutlinedButton(
+                    onClick = { viewModel.setQuestionsAllowed(checkIn.questionsAllowed + 1) },
+                    enabled = checkIn.questionsAllowed < CheckInQuestions.ALLOWED.last,
+                ) { Text("More") }
+            }
+            SwitchRow(
+                title = "Ask about last night",
+                detail = "In the morning, if you keep a sleep diary.",
+                checked = checkIn.sleepQuestion,
+                onChange = viewModel::setSleepQuestion,
+            )
+            SwitchRow(
+                title = "Start evening check-ins in your sky",
+                detail = "The evening reminder opens on the night sky, and your new star lands there.",
+                checked = checkIn.eveningFromSky,
+                onChange = viewModel::setEveningFromSky,
+            )
+        }
+    }
+}
+
+@Composable
+private fun SwitchRow(title: String, detail: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.bodyLarge)
+            Text(detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        DaymarkSwitch(checked = checked, onCheckedChange = onChange)
     }
 }
 

@@ -422,6 +422,7 @@ class OfferLedgerRepository @Inject constructor(
         OfferKind.ASSIGNMENT -> InterruptionBudget.Kind.ASSIGNMENT
         OfferKind.SUPPORT -> InterruptionBudget.Kind.SUPPORT
         OfferKind.TRACKER -> InterruptionBudget.Kind.TRACKER
+        OfferKind.QUESTION -> InterruptionBudget.Kind.QUESTION
     }
 
     companion object {

@@ -1,9 +1,11 @@
 import { describe, it, expect } from 'vitest'
+import { readFileSync } from 'node:fs'
 import {
   FAILURE_SENTENCE,
   PracticeClient,
   failureSentence,
   formatInstant,
+  formatAuditInstant,
   isMemberId,
   isPracticeName,
   memberIdProblem,
@@ -465,6 +467,32 @@ describe('identifiers, as the server defines them', () => {
     expect(practiceNameProblem('Riverside Practice')).toBeNull()
     expect(practiceNameProblem('')).toMatch(/Enter a name/)
     expect(practiceNameProblem('x'.repeat(121))).toMatch(/120/)
+  })
+})
+
+describe('rendering an audit row timestamp (#495)', () => {
+  it('reads seconds, as the audit store writes them, and renders the real year', () => {
+    // 1_700_000_000 seconds is 2023-11-14 22:13 UTC. Read as milliseconds it is 1970-01-20.
+    expect(formatAuditInstant(1_700_000_000)).toBe('2023-11-14 22:13 UTC')
+  })
+
+  it('positive control: the same number read as milliseconds is the 1970 the log used to show', () => {
+    expect(formatInstant(1_700_000_000)).toMatch(/^1970-01-20/)
+  })
+
+  it('still says a missing timestamp is not recorded', () => {
+    expect(formatAuditInstant(0)).toBe('not recorded')
+    expect(formatAuditInstant(null)).toBe('not recorded')
+    expect(formatAuditInstant(undefined)).toBe('not recorded')
+    expect(formatAuditInstant(Number.NaN)).toBe('not recorded')
+  })
+
+  it('the log panel renders its rows with the seconds reader, and the roster keeps milliseconds', () => {
+    const audit = readFileSync(new URL('../components/practice/AuditPanel.svelte', import.meta.url), 'utf8')
+    expect(audit).toContain('formatAuditInstant(event.ts)')
+    expect(audit).not.toMatch(/formatInstant\(event\.ts\)/)
+    const roster = readFileSync(new URL('../components/practice/RosterPanel.svelte', import.meta.url), 'utf8')
+    expect(roster).toContain('formatInstant(Number(row.addedAt))')
   })
 })
 

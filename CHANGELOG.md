@@ -7,6 +7,74 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Added
+- **An invitation can be shown as a code.** After you create an invite link for a clinician, **Show
+  as a code** draws it as a QR code, so a clinician in the room can open it with their phone's
+  camera instead of being sent the link. The screen says that anyone who can see it can open it,
+  and the fingerprint words are still what prove it's them.
+- **The clinician console knows whether you're a therapist, a psychologist or a psychiatrist.**
+  Pick one under **I work as a**, and the tabs lead with what that work reaches for first: today
+  and the calendar, the record of self-checks, or today with sleep beside mood. Timers lead with
+  your own kind of appointment. It never changes what you can read; that still comes only from
+  what the client shares.
+- **Clinicians can run session timers in the Companion.** The clinician console has a **Timers**
+  tab with presets for a session, a medication review, an assessment, a break and writing notes,
+  or a timer of your own, each with an optional nudge before the end. Each one tells you the way
+  you choose: a soft chime, a buzz on a phone, a notification your watch can show as a tap, or a
+  quiet banner. The banner always shows, on every tab, and says so when the device couldn't chime,
+  buzz or notify. Timers stay in the browser and never name a client.
+- **Companion: you can sign in as yourself instead of with the server's shared access token.**
+  Connect the owner console with the token once and choose **Make your own sign-in**: a name and an
+  authenticator app. Everything already on the server stays yours and your paired phones keep
+  working; after that the token opens nothing, and the owner page asks for your name and six digits.
+  The command-line writer gets a credential of its own from the console, set as `DAYMARK_CLI_TOKEN`,
+  which can only read and write backups and can be revoked there. Email recovery is switched off
+  once your sign-in is made (#324).
+- **A background for your phone, made from your sky.** **Background** on your sky makes a picture
+  for your lock or home screen: **Space only**, your sky's colours and gas with none of your stars,
+  or **With my stars**. Drag it or tap **Another view** to frame it, then your phone's own picker
+  asks where it goes. The first time you choose your stars, Daymark says once that anyone who sees
+  your screen sees the shape of your record (#534).
+- **Name a star, give a day a meteor shower, put memories in a place.** A star's card in your sky
+  now has **Name**, for a name of your own, and **Place**, to put that memory in a place you name,
+  such as home. Each place you use becomes a ringed planet among its memories; its size never says
+  how many. **Meteor shower each year** sends meteors from that star on its day every year, while
+  Motion is on. A memory you delete takes its name, shower and place with it, and a backup carries
+  them (#516, #517, #518).
+- **Pulsars for habits with a set time.** A weekly habit can now have **At a set time**. It sets no
+  reminder; in your sky the habit becomes a pulsar that turns at the same beat every day, whatever
+  you did (#519).
+- **The PDF report sets a long gap beside your own longest one.** Where side 2 lists stretches of
+  5 or more days without entries, it now adds your longest stretch in the 6 months before the
+  report, as a number and nothing else. It is left out if your entries don't go back that far, and
+  **Compare long gaps** on the preview leaves it out before you save (#520).
+- **Check a backup opens.** Settings has **Check a backup opens**, which reads a backup file
+  without restoring it and tells you when it was made and how many entries and journal pages it
+  holds, or that it can't be restored. It never changes anything on your phone (#524).
+- **"Signs of a high" and "Signs of a low" in your safety plan.** Two optional lists in your own
+  words, offered together after your warning signs. Nothing in Daymark reads them or acts on them;
+  they are there for you (#523).
+- **A Quick Settings tile that opens your safety plan.** Add the **Daymark** tile to Quick
+  Settings and it opens your plan, after your phone's unlock and your Daymark PIN. It says only
+  "Daymark", so nothing on your lock screen names the plan (#522).
+- **Pick your crisis line from a list.** Where you set your crisis line, **Pick from a list of
+  national lines** offers lines for ten countries. Picking one fills in the fields for you to check
+  and save; you can still change anything. Daymark never looks at where you are to choose for you,
+  and the list shows the date it was last checked (#521).
+- **A check-in can ask one more thing, about something you set up.** After the mood, Daymark may ask
+  about a tracker you set to **In my check-in** (a yes/no tracker called "Did I get outside today?"
+  is a question of your own), or in the morning about last night's sleep if you keep a sleep diary.
+  One question by default; Settings → Reminders → Your check-in sets none to three. Every question
+  can be skipped, explains itself, and can be stopped, and **Done for today** ends it. After Awful
+  or Bad nothing more is asked. A question you skip twice rests for a while instead of repeating.
+- **A closing screen after a check-in**, with **Mark this day**, your safety plan, and, when they
+  fit, **See it land** (your new star arriving in the sky, then back) and **Your sky**. Both sky
+  links are left off after Awful or Bad, and while your reminders have eased off (#538).
+- **Having a hard time** (More): a switch you turn on for a day, a week or until you turn it off.
+  Daymark then reminds you less often, a check-in asks nothing extra, and your sky opens quiet.
+  Anything you keep at its times, like a medication, still comes as set (#537).
+- **Start evening check-ins in your sky**, off unless you turn it on: the evening reminder opens on
+  the night sky and your new star lands there. The notification looks exactly as before (#540).
+- **A tracker in your sky opens its check-in settings** from its card (#539).
 - **You can call your crisis line from the app.** Once you've said the line is right for you, the
   crisis screen has a **Call** button, and **Text** where the line takes texts. Each opens your
   phone's own dialer or messages app with the number filled in; Daymark never places a call. The
@@ -15,6 +83,18 @@ All notable changes to this project are documented here. The format is based on
   feel like too much**, which always leads to the crisis screen (#482).
 
 ### Changed
+- **The clinician console is calmer.** Once you sign in, it uses the same side rail as the practice
+  and admin consoles. Places are grouped as Their share, Send, Tools and This browser, with one
+  thing on the screen at a time. Your discipline and Log out sit at the foot of the rail. On a phone
+  the rail runs across the top.
+- **Your month in the Companion is the calmer Chronicle calendar.** It's one soft card with the
+  month's name in large type, an open grid, and today's date filled in. Pressing a day opens its card
+  right from that day, and the rest of the month fades back. Escape, the × or a click anywhere else
+  closes it. Changing month fades gently, or not at all if you've asked your device for less motion.
+- **The sky's gas has depth.** A star now lights only the gas close to it, by its own size and
+  brightness; thick gas is darker inside than at its rim, and clouds have a lit side and a shadowed
+  one. Where two stars' light meets there is no longer a hard edge, and the gas has no holes or
+  hard blue patches on phones that drew them (#535).
 - **Stars look like stars.** Each one is a sharp point of light: a white-hot heart in its own
   colour, paled toward white, with a tight wing of light round it the way a star's light spreads in
   the eye, and no rays, spikes, hard edge or grey disc round it. A life event is still the one
@@ -42,6 +122,14 @@ All notable changes to this project are documented here. The format is based on
   one corner. The view widens as your sky grows, and no star moves (#476).
 
 ### Fixed
+- **Signing in to the practice console works in a real browser.** Every browser answered "No
+  answer from the server (… Illegal invocation)"; now Sign in reaches the server (#494).
+- **The practice log shows the date each change happened**, not January 1970 (#495).
+- **The server console says what its sign-in protects**: the sign-in opens the console, and the
+  health readings come from public endpoints. It no longer says it holds no credential right under
+  "Signed in as" (#496).
+- **A practice role's duties that have no screen yet say "Not built"** where the role is chosen,
+  so a front desk is no longer offered a calendar that does not exist.
 - **A restore that fails part-way keeps your photos and reminders.** "Replace all" used to empty
   the photo folder and switch reminders off before it knew the restore would work. The file's
   photos now wait in a staging folder until the restore has succeeded, and reminders and tracker

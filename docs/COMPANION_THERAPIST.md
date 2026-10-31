@@ -225,7 +225,7 @@ Everything in §9 is the owner's direction. The clinician has one of their own.
 
 ### What "Leave this relationship" does
 
-At the foot of the portal's **Allowed** tab. Confirming it does exactly three things, in order:
+At the foot of the console's **Allowed** page. Confirming it does exactly three things, in order:
 
 1. **The server records an ending** — one insert-only row keyed on the relationship — and closes the
    clinician's sign-in for it: a correct code is answered `410 Gone` from then on, and every live
@@ -286,6 +286,39 @@ A dismissed clinician does not choose to leave, so none of the above happens.
 So the protection is the **patient's own Revoke**, which stops future delivery only; the sharing strip
 shows who has standing access, with Revoke beside it, on every owner screen. The practice console's
 remove-member confirmation says removal ends a standing in the practice and nobody's relationship.
+
+## 9a1. The console's frame
+
+Once signed in, the clinician console sits in the same frame as the practice and admin consoles: a
+rail of places beside the page, the page's own title above it, and one thing on the screen at a time.
+The rail groups **Their share** (Today, Calendar, Record, Shared data), **Send** (Assign, Game
+plan), **Tools** (Timers) and **This browser** (Allowed), and holds **I work as a** and **Log out**
+at its foot. A place the verified grant does not reach is left off the rail, not shown greyed: it
+could only ever be empty for this clinician. Moving between places draws a different page and never
+fetches; opening the share stays a deliberate act on Shared data. **Leave this relationship** stays
+at the foot of the Allowed page, away from Log out. On a narrow screen the rail runs across the top.
+
+## 9b. Which kind of clinician
+
+The rail's foot asks **I work as a** Therapist, Psychologist or Psychiatrist, and remembers the answer in
+this browser (`companion/web/src/lib/therapist/discipline.ts`). It changes the console's arrangement
+and nothing it can read: the read tabs still sit behind the client's grant. A therapist's tabs lead
+with Today and the Calendar, a psychologist's with the Record of self-checks over time, and a
+psychiatrist's with Today, where sleep sits beside mood. The Timers tab leads with each one's own
+preset: a session, an assessment or a medication review. Not built: a Medication tab for the
+psychiatrist, because medication records are not part of a share yet (#542).
+
+## 9c. Session timers
+
+The console's **Timers** page runs timers for sessions, breaks and the time between, with presets
+(Session 50 minutes, Medication review 25, Assessment 110, Break 10, Writing notes 10) and a timer of
+the clinician's own, each with an optional nudge before the end. Each tells the clinician in the way
+they chose: a chime, a buzz on a phone that can vibrate, a browser notification that a watch
+mirroring the device shows as a tap, or a banner only. The banner shows for every style, on every
+tab, and says what happened instead when the device could not chime, buzz or notify. A timer runs
+against the wall clock, so a hidden tab still ends it on time (`companion/web/src/lib/timers/timers.ts`).
+Timers stay in the browser: nothing is sent to the server, and no timer names or reads a client.
+No grant is needed for them.
 
 ## 10. The audit log
 

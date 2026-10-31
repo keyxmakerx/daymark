@@ -95,9 +95,9 @@
     /** How the host switches surface. Absent, the routes render as inert description. */
     onchoose = undefined,
     /**
-     * Whether the operator console is linked or only named. It holds no credential on this build,
-     * so a deployment that does not want it one click from a public page can turn the link off
-     * without the screen going quiet about the console's existence.
+     * Whether the operator console is linked or only named. A deployment that does not want it
+     * one click from a public page can turn the link off without the screen going quiet about the
+     * console's existence.
      */
     adminLink = false,
     /**

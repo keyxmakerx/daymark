@@ -110,6 +110,7 @@ object RuleReadout {
         InterruptionBudget.Kind.ASSIGNMENT -> "Prescribed modules"
         InterruptionBudget.Kind.SUPPORT -> "The support space"
         InterruptionBudget.Kind.TRACKER -> "Tracker check-ins"
+        InterruptionBudget.Kind.QUESTION -> "Questions in a check-in"
     }
 
     /** A frequency in plain words, phrased for any feature rather than for the support space. */

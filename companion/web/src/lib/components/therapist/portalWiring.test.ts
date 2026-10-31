@@ -91,9 +91,11 @@ describe('one bundle, opened deliberately, cleared with the session', () => {
 
   it('does not fetch the share as a side effect of changing tabs', () => {
     // Opening someone's records is a deliberate act, not something navigation does quietly.
-    const tabHandlers = PORTAL.match(/onclick=\{\(\) => \(tab = '[a-z]+'\)\}/g) ?? []
-    expect(tabHandlers.length).toBeGreaterThan(3) // the tabs really are wired this way
-    for (const h of tabHandlers) expect(h).not.toContain('fetch')
+    // The rail hands every place to one handler, and that handler only sets the page.
+    expect(PORTAL).toContain('<NavRail groups={nav} active={tab} onselect={go}')
+    const go = PORTAL.match(/const go = \(id: string\) => \(tab = id as Tab\)\n/)
+    expect(go).not.toBeNull() // the rail really is wired this way
+    expect(go![0]).not.toContain('fetch')
     expect(PORTAL).not.toContain('fetchShare')
   })
 })
@@ -135,15 +137,18 @@ describe('the dated screens are given a ticking clock, not left to read one', ()
 
 describe('the data surfaces sit behind the capability that feeds them', () => {
   it('gates Today, Calendar and Record on read.share, like the share itself', () => {
-    const i = PORTAL.indexOf("hasCapability(grant, 'read.share')")
+    // The rail's places are built in one derivation; the read places are pushed only inside the
+    // read.share branch, and they are the discipline's ordering of exactly these four.
+    const nav = PORTAL.slice(PORTAL.indexOf('const nav = $derived.by('), PORTAL.indexOf('const go = '))
+    const i = nav.indexOf("if (grant && hasCapability(grant, 'read.share')) {")
     expect(i).toBeGreaterThan(-1)
-    const block = PORTAL.slice(i, PORTAL.indexOf('</nav>', i))
-    for (const tab of ["tab = 'today'", "tab = 'calendar'", "tab = 'record'", "tab = 'shared'"]) {
-      expect(block).toContain(tab)
-    }
-    // The control: a tab that is NOT behind this capability is outside the block, so the four
-    // above are inside it because of the gate rather than because the block is the whole file.
-    expect(block).not.toContain("tab = 'allowed'")
+    const block = nav.slice(i, nav.indexOf('\n    }\n', i))
+    expect(block).toContain('profile.tabOrder.map(')
+    expect(PORTAL).toMatch(/const READ_LABEL: Record<'today' \| 'calendar' \| 'record' \| 'shared', string>/)
+    // The control: a place that is NOT behind this capability is outside the block, so the four
+    // are inside it because of the gate rather than because the block is the whole derivation.
+    expect(nav).toContain("{ id: 'allowed', label: 'Allowed' }")
+    expect(block).not.toContain("'allowed'")
   })
 })
 

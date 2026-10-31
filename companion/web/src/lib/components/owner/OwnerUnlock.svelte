@@ -79,6 +79,8 @@
   import type { RecoveryCode } from '../../recovery/recoveryCode'
   import type { OwnerConnection } from '../../owner/recoveryEmail'
   import type { LaneKey } from '../../lane/lane'
+  import { ownerAccountApi, SIGN_IN_LEDE, type OwnerCredential } from '../../owner/account'
+  import { validName, validTotp } from '../../admin/claim'
 
   let { onunlock }: { onunlock: (session: OwnerSession, connection: OwnerConnection) => void } = $props()
 
@@ -101,6 +103,46 @@
 
   let serverUrl = $state('')
   let token = $state('')
+  /*
+   * The owner's own sign-in (#324). On this page's own server, the server is asked first whether the
+   * owner's account exists: if it does, the door asks for the name and six digits instead of the
+   * token, which the server no longer takes; if a session is already live in this browser, it is
+   * used without asking. On another server's address the cookie cannot be sent, so the token is
+   * asked for as before.
+   */
+  let accountExists = $state<boolean | null>(null)
+  let signInName = $state('')
+  let signInDigits = $state('')
+  const accountApi = ownerAccountApi('')
+  const onThisServer = $derived(serverUrl.trim() === '')
+  const asksForSignIn = $derived(onThisServer && accountExists === true)
+
+  $effect(() => {
+    void (async () => {
+      const status = await accountApi.status()
+      accountExists = status.ok ? status.value.exists : null
+      if (!status.ok || !status.value.exists) return
+      const live = await accountApi.session()
+      if (live.ok && !held && !busy) await connectWith({ csrf: live.value.csrf })
+    })()
+  })
+
+  async function signIn() {
+    error = ''
+    if (!validName(signInName.trim()) || !validTotp(signInDigits.replace(/\s/g, ''))) {
+      error = SIGN_IN_LEDE
+      return
+    }
+    busy = true
+    const out = await accountApi.signIn(signInName, signInDigits)
+    signInDigits = ''
+    busy = false
+    if (!out.ok) {
+      error = out.message
+      return
+    }
+    await connectWith({ csrf: out.value.csrf })
+  }
   /**
    * What the server held when last read with the address and token above; null until then. Raw,
    * because it is replaced whole and never edited, and the locked key in it is handed to the crypto
@@ -200,25 +242,30 @@
     error = ''
   }
 
-  /** Read what the server holds. Nothing is written here. */
+  /** Read what the server holds, with the token typed. Nothing is written here. */
   async function connect() {
-    error = ''
-    notice = ''
     if (!token) {
       error = CONNECT_NO_TOKEN
       return
     }
+    await connectWith(token)
+  }
+
+  /** Read what the server holds, with [credential]: the token, or the signed-in session. */
+  async function connectWith(credential: OwnerCredential) {
+    error = ''
+    notice = ''
     busy = true
     try {
       const { SyncClient, SyncError } = await import('../../sync/client')
       const { serverKeyPorts, enrolmentCheck } = await import('../../recovery/serverKey')
-      const reading = serverKeyPorts(new SyncClient(serverUrl, token))
+      const reading = serverKeyPorts(new SyncClient(serverUrl, credential))
       try {
         const doc = await reading.read()
         check = doc.kind === 'keyparams' ? await enrolmentCheck(reading) : null
         held = doc
         ports = reading
-        readWith = { serverUrl, token }
+        readWith = { serverUrl, token: credential }
       } catch (e) {
         connectionEdited()
         error = e instanceof SyncError && e.status === 401 ? CONNECT_REFUSED : CONNECT_FAILED
@@ -534,12 +581,27 @@
               <span>Server URL <em>(blank = this server)</em></span>
               <input type="url" bind:value={serverUrl} oninput={connectionEdited} placeholder="https://daymark.example.com" autocomplete="off" disabled={busy} />
             </label>
-            <label>
-              <span>Owner access token</span>
-              <input type="password" bind:value={token} oninput={connectionEdited} autocomplete="off" disabled={busy} />
-            </label>
-            {#if !held}
-              <button type="button" onclick={connect} disabled={busy}>{busy ? CONNECT_BUSY : CONNECT_ACTION}</button>
+            {#if asksForSignIn}
+              {#if !held}
+                <p class="hint">{SIGN_IN_LEDE}</p>
+                <label>
+                  <span>Your name</span>
+                  <input type="text" bind:value={signInName} autocomplete="username" disabled={busy} />
+                </label>
+                <label>
+                  <span>Six digits from your authenticator</span>
+                  <input type="text" inputmode="numeric" bind:value={signInDigits} autocomplete="one-time-code" disabled={busy} />
+                </label>
+                <button type="button" onclick={signIn} disabled={busy}>{busy ? CONNECT_BUSY : 'Sign in'}</button>
+              {/if}
+            {:else}
+              <label>
+                <span>Owner access token</span>
+                <input type="password" bind:value={token} oninput={connectionEdited} autocomplete="off" disabled={busy} />
+              </label>
+              {#if !held}
+                <button type="button" onclick={connect} disabled={busy}>{busy ? CONNECT_BUSY : CONNECT_ACTION}</button>
+              {/if}
             {/if}
           </fieldset>
 

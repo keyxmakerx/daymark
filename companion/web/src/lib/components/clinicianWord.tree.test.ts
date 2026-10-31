@@ -150,6 +150,7 @@ const IDENTIFIERS: { value: string; because: string }[] = [
   { value: 'daymark.therapist.share-seen.v1', because: 'a storage key' },
   { value: 'daymark.pairing.therapist-run.v1', because: 'a storage key' },
   { value: 'therapist-app', because: 'the element id therapist.html mounts on' },
+  { value: 'Therapist', because: 'the discipline a clinician picks for themselves on their own console (therapist/discipline.ts), beside Psychologist and Psychiatrist; it names their own job to them, never the person a client shares with' },
   { value: '#therapist-app mount point missing', because: 'a developer error naming that element id; it fires only when the HTML shell is broken' },
 ]
 const ALLOWED = new Set(IDENTIFIERS.map((i) => i.value))
@@ -240,7 +241,7 @@ describe('no word a person reads says "therapist"', () => {
  * a value that is stored, sent or routed; every other string is a word a person reads.
  */
 const PORTAL = /\bportal\b/i
-const PORTAL_IDENTIFIERS = new Set(['/portal/invite', 'portal'])  // 'portal': a CSS class name
+const PORTAL_IDENTIFIERS = new Set(['/portal/invite'])
 
 describe('no word a person reads says "portal"', () => {
   it('the detector sees the word in a planted sentence, and lets an identifier through', () => {
@@ -276,7 +277,7 @@ const NOW: Record<string, string[]> = {
   'practice.html': ['Daymark Companion — practice console'],
   'src/lib/components/therapist/SignInScreen.svelte': ['Clinician console'],
   'src/lib/components/therapist/LoginGate.svelte': ['Clinician console — sign in'],
-  'src/lib/components/therapist/TherapistPortal.svelte': ['Clinician console section'],
+  'src/lib/components/therapist/TherapistPortal.svelte': ['Clinician console'],
   'src/lib/onboarding/audience.ts': ['the clinician console'],
   'src/lib/components/owner/AssignmentInbox.svelte': ['Refresh to fetch assignments from your clinicians.'],
   'src/lib/components/owner/AuditList.svelte': [

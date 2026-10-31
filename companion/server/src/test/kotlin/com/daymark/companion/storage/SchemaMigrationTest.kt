@@ -261,7 +261,7 @@ class SchemaMigrationTest {
                 assertTrue(store.devices.ownerId.isNotEmpty(), "the owner has an id")
             }
 
-            assertEquals(2, userVersion(db), "from $from")
+            assertEquals(OwnerAccountStore.SCHEMA.current, userVersion(db), "from $from")
             assertTrue(phoneTables.all { it in layout(db) }, "from $from: version 2's tables are there: ${layout(db).keys}")
             assertEquals(before, contents(db, layout), "from $from: every row of the database before is as it was")
 

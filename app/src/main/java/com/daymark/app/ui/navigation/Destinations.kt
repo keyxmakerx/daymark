@@ -103,6 +103,13 @@ object Routes {
     const val SKY = "sky"
 
     /**
+     * The Sky, opened for one purpose. [land]: the newest star's birth, then straight back (#538).
+     * [checkIn]: the evening check-in, begun in the night sky (#540). Plain [SKY] still matches.
+     */
+    fun sky(land: Boolean = false, checkIn: Boolean = false) = "$SKY?land=$land&checkin=$checkIn"
+    const val SKY_PATTERN = "$SKY?land={land}&checkin={checkin}"
+
+    /**
      * The life-events list, where a person places their own marks.
      *
      * The screen was built before anything could reach it. `docs/SKY.md` §2.2 gives life events two
@@ -169,8 +176,24 @@ object Routes {
     const val GOAL = "goal"
 
     /** Editor route; pass 0 to create a new entry, and an optional 1..5 mood to preselect. */
-    fun entry(id: Long = 0L, mood: Int = -1) = "$ENTRY/$id?mood=$mood"
-    const val ENTRY_PATTERN = "$ENTRY/{entryId}?mood={mood}"
+    fun entry(id: Long = 0L, mood: Int = -1, sky: Boolean = false) = "$ENTRY/$id?mood=$mood&sky=$sky"
+    const val ENTRY_PATTERN = "$ENTRY/{entryId}?mood={mood}&sky={sky}"
+
+    /**
+     * The end of a new check-in: at most the extra questions the person allows, then its closing
+     * screen (`ui/checkin/CheckInCloseScreen.kt`). [sky] when it began in the night sky (#540).
+     */
+    const val CHECKIN_CLOSE = "checkin_close"
+    fun checkInClose(entryId: Long, mood: Int, sky: Boolean) = "$CHECKIN_CLOSE/$entryId?mood=$mood&sky=$sky"
+    const val CHECKIN_CLOSE_PATTERN = "$CHECKIN_CLOSE/{entryId}?mood={mood}&sky={sky}"
+
+    /** "I'm having a hard time": the switch only the person flips (#537). Reached from More. */
+    const val HARD_TIME = "hard_time"
+
+    /** One tracker's check-in settings and nothing else, as its object in the Sky opens them (#539). */
+    const val TRACKER_CHECKINS = "tracker_checkins"
+    fun trackerCheckIns(id: Long) = "$TRACKER_CHECKINS/$id"
+    const val TRACKER_CHECKINS_PATTERN = "$TRACKER_CHECKINS/{trackerId}"
 
     /** Goal editor route; pass 0 to create a new goal. */
     fun goal(id: Long = 0L) = "$GOAL/$id"

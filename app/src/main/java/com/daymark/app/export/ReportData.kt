@@ -6,6 +6,7 @@ import com.daymark.app.data.dao.JournalDao
 import com.daymark.app.stats.DiscussionPrompts
 import com.daymark.app.stats.MoodCorrelations
 import com.daymark.app.stats.MoodStats
+import com.daymark.app.stats.PriorGap
 import com.daymark.app.ui.assessments.Assessments
 import com.daymark.app.ui.components.ProvenanceTier
 import com.daymark.app.util.DateUtils
@@ -123,7 +124,12 @@ data class ReportProjectProgress(
  * Gaps are printed rather than smoothed over: no figure on any side is interpolated across one,
  * and a reader who cannot see where the data stops cannot tell a flat line from an absent one.
  */
-data class ReportCoverageGap(val from: LocalDate, val to: LocalDate, val days: Int)
+data class ReportCoverageGap(val from: LocalDate, val to: LocalDate, val days: Int) {
+    companion object {
+        /** A gap has to be this long before side 2 names it on a line of its own. */
+        const val NAMED_MIN_DAYS = 5
+    }
+}
 
 /**
  * Everything the PDF generator needs, plus an authenticity hash over the source data.
@@ -158,6 +164,13 @@ data class ReportData(
      * carrying its own totals, so the coverage paragraph and the header can never disagree.
      */
     val coverageGaps: List<ReportCoverageGap> = emptyList(),
+    /**
+     * Side 2: the person's longest stretch without entries in the six months before the range
+     * (`stats/PriorGap.kt`), or null when the range names no long gap or the entries do not reach
+     * back six months. Carried whether or not [PdfExportOptions.includeGapComparison] is on, so the
+     * preview can offer the switch; the renderer prints it only when the switch is on (#520).
+     */
+    val priorLongestGapDays: Int? = null,
     /**
      * Side 4: observations from this person's own data, phrased as questions for the two humans.
      * Never a recommendation — see [PdfExportOptions.includeDiscussionPrompts].
@@ -252,6 +265,11 @@ class ReportDataBuilder @Inject constructor(
 
         val instrumentSeries = buildInstrumentSeries(options.fromMillis, options.toMillis)
         val gaps = coverageGaps(from, daysInRange, byDay.keys)
+        val priorLongestGapDays = if (gaps.any { it.days >= ReportCoverageGap.NAMED_MIN_DAYS }) {
+            priorLongestGap(from)
+        } else {
+            null
+        }
 
         // Side 4's prompts. Computed here rather than left to default, because the generator's
         // "nothing met the threshold" line asserts to a clinician that a threshold WAS evaluated —
@@ -305,6 +323,7 @@ class ReportDataBuilder @Inject constructor(
             ),
             instrumentSeries = instrumentSeries,
             coverageGaps = gaps,
+            priorLongestGapDays = priorLongestGapDays,
             journalEntriesAvailable = journalInRange.size,
             // Keyed off what actually got included, not off the flag alone. `journal` is non-empty
             // only when the side was switched on, so this is the old `includeInTheirWords &&`
@@ -389,6 +408,15 @@ class ReportDataBuilder @Inject constructor(
         val e = runEnd
         if (s != null && e != null) gaps.add(gap(s, e))
         return gaps
+    }
+
+    /** The longest gap in the six months before [from], read from entry times alone (#520). */
+    private suspend fun priorLongestGap(from: LocalDate): Int? {
+        val first = entryDao.firstDateTime()?.let(DateUtils::toLocalDate) ?: return null
+        val windowStart = from.minusMonths(PriorGap.MONTHS)
+        val logged = entryDao.dateTimesBetween(DateUtils.startOfDay(windowStart), DateUtils.startOfDay(from) - 1)
+            .map(DateUtils::toLocalDate).toSet()
+        return PriorGap.longestBefore(from, first, logged)
     }
 
     private fun gap(from: LocalDate, to: LocalDate) = ReportCoverageGap(

@@ -65,6 +65,13 @@ const ACTION_LABELS: Record<string, string> = {
    */
   'device.registered': 'Paired a phone',
   'device.revoked': 'Disconnected a phone',
+  /*
+   * The owner's own sign-in (#324), in the words of its buttons: "Make my sign-in" and "Make a
+   * credential" and "Revoke". The access token signs nobody in after the first row.
+   */
+  'owner.account_created': 'Made your own sign-in; the access token stopped working',
+  'cli.issued': 'Made a command-line writer credential',
+  'cli.revoked': 'Revoked a command-line writer credential',
 }
 
 export function auditActionLabel(action: string): string {

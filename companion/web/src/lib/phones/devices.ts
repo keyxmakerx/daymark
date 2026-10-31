@@ -21,6 +21,7 @@
  *   http         409 from minting: the server's address is not https, so it makes no code
  *   gone         404 for a code or its confirmation: the code, or the time to confirm, has run out
  */
+import { ownerAuthHeaders, type OwnerCredential } from '../owner/account'
 
 /** One phone as the list route reports it. The server keeps no name for a phone, only its key. */
 export interface DeviceRecord {
@@ -98,12 +99,12 @@ function faultOf(status: number, gone: FaultKind = 'refused'): PhonesFault {
 }
 
 /** The owner's phone routes on [serverUrl] ('' for this page's own server), with [token]. */
-export function devicesApi(serverUrl: string, token: string, doFetch: FetchLike = fetch.bind(globalThis)): DevicesApi {
+export function devicesApi(serverUrl: string, token: OwnerCredential, doFetch: FetchLike = fetch.bind(globalThis)): DevicesApi {
   const base = serverUrl.trim().replace(/\/+$/, '')
 
   /** One request; a request that gets no answer at all is `unreachable`. Never cached. */
   async function send(method: 'GET' | 'POST', path: string, body?: unknown): Promise<Response> {
-    const headers: Record<string, string> = { Authorization: `Bearer ${token}` }
+    const headers: Record<string, string> = ownerAuthHeaders(token)
     if (body !== undefined) headers['Content-Type'] = 'application/json'
     try {
       return await doFetch(base + path, {

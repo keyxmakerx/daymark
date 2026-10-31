@@ -81,6 +81,9 @@ import com.daymark.app.ui.navigation.TopLevelDestination
 import com.daymark.app.ui.lifeevents.LifeEventsScreen
 import com.daymark.app.ui.search.SearchScreen
 import com.daymark.app.ui.sky.SkyScreen
+import com.daymark.app.ui.checkin.CheckInCloseScreen
+import com.daymark.app.ui.hardtime.HardTimeScreen
+import com.daymark.app.ui.trackers.TrackerCheckInsScreen
 import com.daymark.app.sky.SkyKind
 import com.daymark.app.ui.sleep.BreathingCaptureScreen
 import com.daymark.app.ui.sleep.ScreenerScreen
@@ -109,7 +112,13 @@ import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun DaymarkAppScaffold(initialMood: Int = -1, openEditor: Boolean = false, openTracker: Long = -1L) {
+fun DaymarkAppScaffold(
+    initialMood: Int = -1,
+    openEditor: Boolean = false,
+    openTracker: Long = -1L,
+    openSafetyPlan: Boolean = false,
+    openFromSky: Boolean = false,
+) {
     val navController = rememberNavController()
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
@@ -119,13 +128,19 @@ fun DaymarkAppScaffold(initialMood: Int = -1, openEditor: Boolean = false, openT
     // From the home-screen widget: jump straight into a new entry with the tapped mood.
     // From a reminder notification (openEditor): open a blank new entry.
     // From a tracker's check-in or quick-log notification (openTracker): open that tracker.
-    androidx.compose.runtime.LaunchedEffect(initialMood, openEditor, openTracker) {
+    // From the Quick Settings tile (openSafetyPlan): open the safety plan (#522).
+    androidx.compose.runtime.LaunchedEffect(initialMood, openEditor, openTracker, openSafetyPlan, openFromSky) {
         if (initialMood in 1..5) {
             navController.navigate(Routes.entry(mood = initialMood))
+        } else if (openEditor && openFromSky) {
+            // The person chose to start evening check-ins in the night sky (#540).
+            navController.navigate(Routes.sky(checkIn = true))
         } else if (openEditor) {
             navController.navigate(Routes.entry())
         } else if (openTracker > 0L) {
             navController.navigate(Routes.tracker(openTracker))
+        } else if (openSafetyPlan) {
+            navController.navigate(Routes.SAFETY_PLAN)
         }
     }
 
@@ -352,6 +367,14 @@ fun DaymarkAppScaffold(initialMood: Int = -1, openEditor: Boolean = false, openT
             ) {
                 TrackerDetailScreen(onBack = { navController.popBackStack() })
             }
+            composable(
+                Routes.TRACKER_CHECKINS_PATTERN,
+                arguments = listOf(navArgument("trackerId") { type = NavType.StringType }),
+                enterTransition = sheetEnter,
+                popExitTransition = sheetPopExit,
+            ) {
+                TrackerCheckInsScreen(onBack = { navController.popBackStack() })
+            }
             composable(Routes.YEAR_PIXELS, enterTransition = zEnter, popExitTransition = zPopExit) {
                 YearPixelsScreen(onBack = { navController.popBackStack() })
             }
@@ -386,13 +409,26 @@ fun DaymarkAppScaffold(initialMood: Int = -1, openEditor: Boolean = false, openT
                     onThoughtRecords = { navController.navigate(Routes.THOUGHT_RECORDS) },
                     onMovement = { navController.navigate(Routes.MOVEMENT) },
                     onSafetyPlan = { navController.navigate(Routes.SAFETY_PLAN) },
+                    onHardTime = { navController.navigate(Routes.HARD_TIME) },
                     onCrisis = { navController.navigate(Routes.CRISIS) },
                     onSettings = { navController.navigate(Routes.SETTINGS) },
                     modifier = Modifier.padding(padding),
                 )
             }
-            composable(Routes.SKY, enterTransition = zEnter, popExitTransition = zPopExit) {
+            composable(
+                Routes.SKY_PATTERN,
+                arguments = listOf(
+                    navArgument("land") { type = NavType.StringType; defaultValue = "false" },
+                    navArgument("checkin") { type = NavType.StringType; defaultValue = "false" },
+                ),
+                enterTransition = zEnter,
+                popExitTransition = zPopExit,
+            ) { entry ->
                 SkyScreen(
+                    landing = entry.arguments?.getString("land") == "true",
+                    checkIn = entry.arguments?.getString("checkin") == "true",
+                    onCheckInMood = { level -> navController.navigate(Routes.entry(mood = level, sky = true)) },
+                    onOpenTrackerCheckIns = { id -> navController.navigate(Routes.trackerCheckIns(id)) },
                     onBack = { navController.popBackStack() },
                     // The Sky names an act and hands off to whatever owns the content — §4.1's rule
                     // that it shows *that* you wrote and never *what*. A kind with nowhere to hand
@@ -402,6 +438,37 @@ fun DaymarkAppScaffold(initialMood: Int = -1, openEditor: Boolean = false, openT
                     },
                     onOpenLifeEvents = { navController.navigate(Routes.LIFE_EVENTS) },
                     onOpenTracker = { id -> navController.navigate(Routes.tracker(id)) },
+                )
+            }
+            composable(
+                Routes.CHECKIN_CLOSE_PATTERN,
+                arguments = listOf(
+                    navArgument("entryId") { type = NavType.StringType },
+                    navArgument("mood") { type = NavType.StringType; defaultValue = "3" },
+                    navArgument("sky") { type = NavType.StringType; defaultValue = "false" },
+                ),
+                enterTransition = sheetEnter,
+                popExitTransition = sheetPopExit,
+            ) {
+                CheckInCloseScreen(
+                    onClose = { navController.popBackStack() },
+                    onSeeItLand = { navController.navigate(Routes.sky(land = true)) },
+                    onYourSky = { navController.navigate(Routes.SKY) },
+                    // The evening check-in begun in the sky ends there; Back from it is home.
+                    onLand = {
+                        navController.navigate(Routes.sky(land = true)) {
+                            popUpTo(Routes.HOME)
+                        }
+                    },
+                    onTakeAMoment = { navController.navigate(Routes.SUPPORT) },
+                    onSafetyPlan = { navController.navigate(Routes.SAFETY_PLAN) },
+                    onLogSleep = { navController.navigate(Routes.SLEEP_LOG) },
+                )
+            }
+            composable(Routes.HARD_TIME, enterTransition = zEnter, popExitTransition = zPopExit) {
+                HardTimeScreen(
+                    onBack = { navController.popBackStack() },
+                    onSafetyPlan = { navController.navigate(Routes.SAFETY_PLAN) },
                 )
             }
             composable(Routes.LIFE_EVENTS, enterTransition = zEnter, popExitTransition = zPopExit) {
@@ -631,11 +698,19 @@ fun DaymarkAppScaffold(initialMood: Int = -1, openEditor: Boolean = false, openT
                 arguments = listOf(
                     navArgument("entryId") { type = NavType.StringType },
                     navArgument("mood") { type = NavType.StringType; defaultValue = "-1" },
+                    navArgument("sky") { type = NavType.StringType; defaultValue = "false" },
                 ),
                 enterTransition = sheetEnter,
                 popExitTransition = sheetPopExit,
             ) {
                 EntryEditorScreen(
+                    // A new check-in with something more to ask or offer goes on to its closing
+                    // screen, which replaces the editor so Back does not reopen a saved entry.
+                    onCheckedIn = { id, mood, sky ->
+                        navController.navigate(Routes.checkInClose(id, mood, sky)) {
+                            popUpTo(Routes.ENTRY_PATTERN) { inclusive = true }
+                        }
+                    },
                     onDone = { navController.popBackStack() },
                     onOfferSupport = {
                         navController.popBackStack()

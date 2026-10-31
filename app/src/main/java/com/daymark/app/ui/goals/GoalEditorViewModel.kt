@@ -43,6 +43,12 @@ data class GoalEditorUiState(
      * survive the trip through this screen intact rather than being re-derived on write.
      */
     val reachedAt: Long? = null,
+    /**
+     * A habit's set time, minutes after midnight, or null for none (#519). Set only by the person,
+     * held until Save, and kept when switching to a project like every other field of the half not
+     * in use. A habit with one is drawn as a pulsar in the sky.
+     */
+    val atMinute: Int? = null,
     val activities: List<ActivityEntity> = emptyList(),
     val isEditing: Boolean = false,
     val saved: Boolean = false,
@@ -100,6 +106,7 @@ class GoalEditorViewModel @Inject constructor(
                             cue = g.cue, routine = g.routine,
                             kind = GoalKind.fromKey(g.kind), steps = steps,
                             reachedAt = g.reachedAt,
+                            atMinute = g.atMinute,
                             isEditing = true,
                         )
                     }
@@ -114,6 +121,12 @@ class GoalEditorViewModel @Inject constructor(
     fun setTarget(value: Int) = _uiState.update { it.copy(targetPerWeek = value.coerceIn(1, 7)) }
     fun setCue(value: String) = _uiState.update { it.copy(cue = value) }
     fun setRoutine(value: String) = _uiState.update { it.copy(routine = value) }
+
+    /** The habit's set time, or null to take it away. Anything outside a day is refused. */
+    fun setAtMinute(value: Int?) {
+        if (value != null && value !in 0 until 24 * 60) return
+        _uiState.update { it.copy(atMinute = value) }
+    }
 
     /**
      * Switches a goal between the weekly count and the step board.
@@ -195,6 +208,7 @@ class GoalEditorViewModel @Inject constructor(
                     // Written through from state, never recomputed here: an already-reached goal
                     // saved again for an edited title keeps the date the person marked it on.
                     reachedAt = s.reachedAt,
+                    atMinute = s.atMinute,
                 ),
             )
             goalRepository.replaceSteps(savedId, s.steps)

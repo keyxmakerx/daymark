@@ -51,6 +51,7 @@ import type { Plane, PracticeCapability } from './capabilities'
 import { CAPABILITIES, PLANE_LABEL, describePracticeCapability, readsOthersClinical } from './capabilities'
 import type { PracticeRole, ReadPosture, RoleId } from './roles'
 import { ROLES, readClinicalCapabilitiesIn, readMintingCapabilitiesIn, roleById } from './roles'
+import { isBuilt } from './built'
 
 /* ═══════════════════════════════════════════════════════════════════════════════════════════
    1. The six values the server will accept in a membership row.
@@ -159,6 +160,8 @@ export interface RoleAction {
   readonly plane: Plane
   readonly planeLabel: string
   readonly readsOthersClinical: boolean
+  /** Whether a person can do this today from a console this server serves (built.ts). */
+  readonly built: boolean
 }
 
 /**
@@ -247,6 +250,7 @@ export function roleFacts(wire: OrgRoleWire): RoleFacts {
         plane: facts.plane,
         planeLabel: PLANE_LABEL[facts.plane],
         readsOthersClinical: readsOthersClinical(id),
+        built: isBuilt(id),
       }
     }),
     clinicalReadActions: readClinicalCapabilitiesIn(role),

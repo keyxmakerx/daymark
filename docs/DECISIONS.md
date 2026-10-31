@@ -101,6 +101,12 @@ answering"* or *"Keep reminding me at these times"*. Kept, the check-in never ea
 a longer wait; it is never more than the person set either, so the invariant holds both ways. The
 answer can be changed wherever the check-ins are set (`ui/components/KeepTimesChoice.kt`).
 
+**A state the person declares is not an inference.** "I'm having a hard time" (#537) is a switch
+only the person flips, for a stretch they choose; nothing suggests it, least of all after a hard
+answer. Its only effect is to ask less: check-ins are posted at least one step quieter
+(`CheckInEngine.duringHardTime`), a check-in asks no extra question, and the Sky opens quiet. A
+check-in kept at its times is untouched, and no notice is sent, because the person already knows.
+
 **Asking for more is the person's, never an inference.** The one way to get repeat reminders is an
 explicit setting, *"nudge me again if I miss one"*, off until the person turns it on. The engine
 may then repeat a check-in within the limits that setting states, and no further. It may quieten
@@ -392,6 +398,10 @@ disagree, this decision governs the build.
 - **The Key stays, and leads with "red only means old".** It lists only what is in that person's
   sky.
 - **Any tap skips the opening.** With reduced motion, the sky opens still, on today.
+- **A background for the phone can be made from the sky** (maintainer, 2026-10-31), as space only
+  or with the person's stars. Space only comes from the seed alone, so a lock screen says nothing
+  about the person; with stars says once, before the first, that anyone who sees the screen sees
+  the shape of the record. It is set through Android's own wallpaper picker and needs no network.
 - **Never**: a moon or land; anything framed as depression or as memories being eaten; a meteor
   shower on a day the person did not choose; a pulsar for a habit without a set time; device location
   for a place.

@@ -5,6 +5,7 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.daymark.app.data.ActivityRepository
+import com.daymark.app.data.CheckInPlanner
 import com.daymark.app.data.EntryRepository
 import com.daymark.app.data.OfferLedgerRepository
 import com.daymark.app.data.PeopleRepository
@@ -56,6 +57,15 @@ data class EntryEditorUiState(
     val offerSupport: Boolean = false,
     /** Whether the person has opted into gentle support at all. */
     val gentleSupportOn: Boolean = false,
+    /** The row the save wrote, for the check-in's closing screen. */
+    val savedId: Long = 0L,
+    /**
+     * True when a new check-in goes on to its closing screen: there is a question to ask or an
+     * offer to make (`data/CheckInPlanner.kt`), or it began in the night sky (#540).
+     */
+    val closeAfter: Boolean = false,
+    /** This check-in began in the night sky, from the evening reminder (#540). */
+    val fromSky: Boolean = false,
 ) {
     /**
      * The quiet corner action, shown the moment a low mood is picked — before saving, while you're
@@ -75,6 +85,7 @@ class EntryEditorViewModel @Inject constructor(
     private val peopleRepository: PeopleRepository,
     private val settingsRepository: SettingsRepository,
     private val offerLedger: OfferLedgerRepository,
+    private val checkInPlanner: CheckInPlanner,
     private val photoStore: PhotoStore,
     private val autoLock: AutoLockController,
     savedStateHandle: SavedStateHandle,
@@ -88,12 +99,14 @@ class EntryEditorViewModel @Inject constructor(
 
     private val entryId: Long = savedStateHandle.get<String>("entryId")?.toLongOrNull() ?: 0L
     private val prefillMood: Int = savedStateHandle.get<String>("mood")?.toIntOrNull() ?: -1
+    private val fromSky: Boolean = savedStateHandle.get<String>("sky")?.toBooleanStrictOrNull() ?: false
 
     private val _uiState = MutableStateFlow(
         EntryEditorUiState(
             entryId = entryId,
             moodLevel = if (entryId == 0L && prefillMood in 1..5) prefillMood else 3,
             gentleSupportOn = settingsRepository.gentleSupportEnabled,
+            fromSky = entryId == 0L && fromSky,
         ),
     )
     val uiState: StateFlow<EntryEditorUiState> = _uiState.asStateFlow()
@@ -260,7 +273,13 @@ class EntryEditorViewModel @Inject constructor(
                 settingsRepository.supportOfferLastShownAt = now
                 recordOffer(now)
             }
-            _uiState.update { it.copy(saved = true, offerSupport = interrupt) }
+            // A new check-in that is not being taken to the support space may go on to its
+            // closing screen. Editing an old entry is not a check-in, and asks nothing more.
+            val closeAfter = !s.isEditing && !interrupt &&
+                (s.fromSky || !checkInPlanner.plan(s.moodLevel, now).isEmpty)
+            _uiState.update {
+                it.copy(saved = true, offerSupport = interrupt, savedId = savedId, closeAfter = closeAfter)
+            }
         }
     }
 

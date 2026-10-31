@@ -16,6 +16,7 @@ import androidx.core.content.getSystemService
 import com.daymark.app.MainActivity
 import com.daymark.app.R
 import com.daymark.app.data.CheckInStateStore
+import com.daymark.app.data.SettingsRepository
 import com.daymark.app.data.OfferLedgerRepository
 import com.daymark.app.data.dao.TrackerDao
 import com.daymark.app.data.dao.TrackerLogDao
@@ -59,6 +60,7 @@ class TrackerCheckInScheduler @Inject constructor(
     private val trackerLogDao: TrackerLogDao,
     private val offerLedger: OfferLedgerRepository,
     private val checkInState: CheckInStateStore,
+    private val settings: SettingsRepository,
 ) {
     fun createChannels() {
         val manager = context.getSystemService<NotificationManager>() ?: return
@@ -145,7 +147,17 @@ class TrackerCheckInScheduler @Inject constructor(
             val state = checkInState.tracker(trackerId)
             val pace = currentPace(tracker, state, previous, nowMillis)
             announce(tracker, state, pace, trial = false)
-            if (!CheckInEngine.shouldPost(pace, previous, nowMillis)) return
+            // The hard-time switch quietens posting only, never the notices (CheckInEngine.duringHardTime).
+            val posted = if (settings.hardTimeOn(nowMillis)) {
+                CheckInEngine.duringHardTime(
+                    pace,
+                    TrackerRhythm.setSpacingMillis(tracker.rhythmChoice, tracker.fewCount, tracker.window),
+                    tracker.keepAsSet,
+                )
+            } else {
+                pace
+            }
+            if (!CheckInEngine.shouldPost(posted, previous, nowMillis)) return
         }
 
         val notification = NotificationCompat.Builder(context, CHECKIN_CHANNEL_ID)

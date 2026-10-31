@@ -10,12 +10,16 @@ import com.daymark.app.data.dao.LifeEventDao
 import com.daymark.app.data.dao.SkyPutAwayDao
 import com.daymark.app.data.dao.TrackerDao
 import com.daymark.app.data.entity.Constellation
+import com.daymark.app.data.entity.SkyPlace
 import com.daymark.app.data.entity.SkyPutAway
+import com.daymark.app.data.entity.SkyStar
 import com.daymark.app.data.dao.ThoughtRecordDao
 import com.daymark.app.sky.Sky
 import com.daymark.app.sky.SkyColours
 import com.daymark.app.sky.SkyConstellation
 import com.daymark.app.sky.SkyKind
+import com.daymark.app.sky.SkyObjects
+import com.daymark.app.sky.SkyStars
 import com.daymark.app.sky.SkyRecord
 import com.daymark.app.sky.SkySeed
 import com.daymark.app.sky.SkyTrackers
@@ -79,6 +83,7 @@ class SkyRepository @Inject constructor(
     private val constellationDao: ConstellationDao,
     private val trackerDao: TrackerDao,
     private val putAwayDao: SkyPutAwayDao,
+    private val starDao: com.daymark.app.data.dao.SkyStarDao,
     private val prefs: SharedPreferences,
 ) {
 
@@ -172,8 +177,46 @@ class SkyRepository @Inject constructor(
         rows.map { SkyTrackers.Source(it.trackerId, it.logs, epochDayOf(it.firstMillis, zone)) }
     }
 
+    /** What the person chose for their stars: names, showers and places (#516, #517, #518). */
+    fun observeStarChoices(): Flow<List<SkyStars.Choice>> = starDao.observeStars().map { rows ->
+        rows.map { SkyStars.Choice(it.kind, it.recordId, it.name, it.shower, it.placeId) }
+    }
+
+    /** The places the person named, by name. */
+    fun observePlaces(): Flow<List<SkyStars.Place>> = starDao.observePlaces().map { rows ->
+        rows.map { SkyStars.Place(it.id, it.name) }
+    }
+
+    /** Changes one star's choices: [change] is handed what is stored now, or an empty choice. */
+    suspend fun updateStar(kind: SkyKind, recordId: Long, change: (SkyStar) -> SkyStar) {
+        val now = starDao.get(kind.key, recordId) ?: SkyStar(kind.key, recordId)
+        starDao.save(change(now))
+    }
+
+    suspend fun addPlace(name: String): Long = starDao.insertPlace(SkyPlace(name = name, createdAt = System.currentTimeMillis()))
+
+    suspend fun renamePlace(id: Long, name: String) = starDao.renamePlace(id, name)
+
+    suspend fun deletePlace(id: Long) = starDao.deletePlace(id)
+
+    /**
+     * Each habit the person gave a set time, as `sky/` takes it: its id, the day it was made and
+     * its time (#519). Read without its title, and without a single one of its check-ins.
+     */
+    fun observeTimedHabits(): Flow<List<SkyObjects.Habit>> = goalDao.observeSkyHabits().map { rows ->
+        val zone = ZoneId.systemDefault()
+        rows.map { SkyObjects.Habit(it.id, epochDayOf(it.createdAt, zone), it.atMinute) }
+    }
+
     /** Shows a tracker in the sky, or takes it out: the person's choice, per tracker. */
     suspend fun setTrackerShown(trackerId: Long, shown: Boolean) = trackerDao.setShowInSky(trackerId, shown)
+
+    /** Whether the person has read the one-time note before a background with stars (#534). */
+    fun wallpaperNoteSeen(): Boolean = prefs.getBoolean(KEY_WALLPAPER_NOTE, false)
+
+    fun markWallpaperNoteSeen() {
+        prefs.edit().putBoolean(KEY_WALLPAPER_NOTE, true).apply()
+    }
 
     /** The person's choice of colours: 0 for the sky's own, one more for each "Try other colours". */
     fun colourChoice(): Int = prefs.getInt(KEY_COLOUR_CHOICE, 0)
@@ -317,6 +360,7 @@ class SkyRepository @Inject constructor(
         const val KEY_BORN = "sky_born_identity"
         const val KEY_COLOUR_CHOICE = "sky_colour_choice"
         const val KEY_COLOUR_UNTIL = "sky_colour_until"
+        const val KEY_WALLPAPER_NOTE = "sky_wallpaper_note_seen"
     }
 }
 
@@ -357,3 +401,9 @@ data class SkyDayPoint(val id: Long, val epochDay: Long, val hard: Boolean)
  * No name, no value and no note, for the same reason as every projection above.
  */
 data class SkyTrackerPoint(val trackerId: Long, val logs: Int, val firstMillis: Long)
+
+/**
+ * A habit with a set time, for its pulsar (#519): its id, when it was made, and its time. No title,
+ * and nothing about whether it was done.
+ */
+data class SkyHabitPoint(val id: Long, val createdAt: Long, val atMinute: Int)

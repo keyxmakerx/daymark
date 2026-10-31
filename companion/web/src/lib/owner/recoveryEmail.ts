@@ -27,12 +27,14 @@
  */
 import type { NotificationSettings } from '../sync/portal'
 import { OWNER_ROUTES, type OwnerRouteId } from '../onboarding/audience'
+import type { OwnerCredential } from './account'
 
 /** Where the page reaches the server with the owner's access token, once a fetch has proved it. */
 export interface OwnerConnection {
   /** As the person typed it on the sync card; blank means this page's own server. */
   serverUrl: string
-  token: string
+  /** The shared token while it lasts, or the owner's signed-in session (account.ts, #324). */
+  token: OwnerCredential
 }
 
 /** A link on this card to another of the owner's entry points, named as its route card names it. */

@@ -112,6 +112,41 @@ factor opens a blank goal editor rather than one with the factor filled in: #178
 Entries written on today's date in earlier years, shown under More for you. It is a suggestion group,
 so it can be snoozed or turned off like any other.
 
+### 1.7 The end of a check-in
+
+A new entry, saved, may go on to a short closing step (`stats/CheckInQuestions.kt`,
+`ui/checkin/CheckInCloseScreen.kt`). Editing an old entry never does, and when there is nothing to
+ask or offer the editor closes as it always did.
+
+- **At most one extra question by default**, and never more than the person's own setting (none to
+  three, Settings → Reminders → Your check-in). A question comes only from something the person set
+  up: a tracker set to **In my check-in** (§6.1), or, in the morning, last night's sleep for someone
+  who used the sleep diary in the last two weeks and has not logged last night. The rules engine
+  picks them and never reads the mood value, a note or a score to do it.
+- **A hard mood only shortens it.** After Awful or Bad there is no question and no sky offer; the
+  closing screen leads with **Take a moment** and **My safety plan**. While the person has said they
+  are having a hard time (§1.8) there is no question either.
+- Every question has **Skip**, **Why this question?** and **Stop asking this**, and **Done for
+  today** ends the whole of it. There is no count of questions. A question is asked at most once a
+  day and never for what is already logged. Skipped twice running it rests, every other day and then
+  further apart, never off by itself; answered, it is back at once. Stop asking sets the tracker
+  back to When it happens, or turns the sleep question off.
+- **The closing screen** says "Saved." and offers **Mark this day**, **My safety plan** and, when the
+  engine leaves them in, **See it land** (the new star's birth in the Sky, then straight back) and
+  **Your sky**. The engine can only take those two away: after Awful or Bad, whenever the person's
+  reminders have eased off (one answered check-in puts them back), and See it land during a hard
+  time (#538). Answering more never changes the star.
+
+### 1.8 Having a hard time
+
+**More → Having a hard time** is a switch only the person turns on, for a day, a week or until they
+turn it off (#537). While it is on, reminders and tracker check-ins are posted at least one step
+less often (`CheckInEngine.duringHardTime`), a check-in asks nothing extra and offers no See it
+land, and the Sky opens quiet, on today, without the opening or any flight. Anything kept at its
+times, like a medication, comes as set. It sends no notice and is never suggested, least of all
+after a hard answer; the safety plan sits beside it. Turning it off is one tap there, and the Quiet
+sky toggle still shows the full sky at any time. Nothing is hidden or deleted.
+
 ## 2. Journal
 
 A diary separate from mood notes: a title and a body, not tied to a mood, with its own search. A
@@ -159,8 +194,13 @@ entries, journal pages, thought records (the one practice that keeps its own dat
 project steps done, goals marked reached, and life events. A star's colour is its age; mood moves
 only its halo; a missing day is never drawn. A **life event** is a mark on one day in the person's
 own words, added from the Sky's life-events list or with Mark this day (§1.3); tapping one there
-offers **Mark as hard**, which only its supernova in the sky reads. Any star can be **put away**
-from the sky alone and brought back from its list. Each sky has its own colours, which can be
+offers **Mark as hard**, which only its supernova in the sky reads. A tracker shown in the sky
+offers **Check-in settings**, its times and easing and nothing else (#539). Any star can be **put away**
+from the sky alone and brought back from its list. A star's card can also give it a name of the
+person's own, put its memory in a place they name (a ringed planet in the sky), or give its day a
+meteor shower each year; a weekly habit with **At a set time** is a pulsar. **Background** makes
+a picture for the phone's lock or home screen, of space only or with the person's stars, set
+through Android's own wallpaper picker. Each sky has its own colours, which can be
 changed for 30 days, and **Reset my sky** grows it again. Every rule the Sky keeps is in
 [SKY.md](SKY.md).
 
@@ -170,6 +210,8 @@ changed for 30 days, and **Reset my sky** grows it again. Every rule the Sky kee
   days this week with an entry tagged with its activity ("3× per week · 2 of 3 done"). A **project**
   holds concrete steps on a three-column board, To do, Doing and Done, and states its progress as
   "3 of 7 steps done". A project needs at least one step.
+- A weekly habit can have **At a set time**, off until the person turns it on and picks a time. It
+  sets no reminder; in the sky it is a pulsar, which turns at one beat whatever the record says.
 - Any goal can carry an optional if-then plan: "When… (cue)", "I will… (routine)".
 - **Reached is the person's to say.** A **Reached** switch in the goal editor ("Yours to say, and
   yours to take back.") records the day; the goals list then says "You marked this reached." and the
@@ -201,6 +243,9 @@ Each tracker has its own **check-ins**, on its own screen, and a new tracker ask
   from day to day. Each sits in its own equal share of the hours, at least half a share from the
   next, and the same day always gets the same times (`stats/TrackerRhythm.kt`).
 - **Don't ask**: no check-ins and no prompt.
+- **In my check-in**: asked as a question after the person checks in, at most once a day, with no
+  notification of its own (§1.7). A yes/no tracker named "Did I get outside today?" is how someone
+  writes a question of their own.
 
 A tracker's check-ins run through the same rules engine as the reminders (§12): unanswered ones
 ease it off with no cap, it is never switched off except by the person, and every change is
@@ -301,6 +346,13 @@ recommending, never setting, how often the support space is offered: #172.
   line** and **Not now**. It is never guessed from the phone's region or location, and a blank name
   or contact is never saved. Someone who set Daymark up before onboarding asked is asked once, on
   Home, with the same three answers; any answer ends it (#482).
+- **A list to pick from.** Wherever the line is set (onboarding, Home's one-time check, the crisis
+  screen), **Pick from a list of national lines** opens a short bundled list in country order
+  (`app/src/main/java/com/daymark/app/data/CrisisLineDirectory.kt`). Picking one fills in the
+  fields and nothing else: the person reads them, can change any of them, and saves as if they had
+  typed them. Nothing reads the phone's region, SIM, language or location to choose or sort the
+  list. Every entry names the page its number came from and the day it was last checked, and the
+  list shows that date under it (#521).
 - **Call and Text.** The line has a number of its own, apart from the free-text contact, and once
   the person has confirmed the line (kept it when asked, or typed their own) the crisis screen shows
   **Call** and, where the line takes texts, **Text**. Each opens the phone's own dialer or messages
@@ -329,12 +381,21 @@ recommending, never setting, how often the support space is offered: #172.
   *People I can reach* (a name, and optionally who they are), and, only if the person adds it,
   *Reasons I want to stay*. That fourth section is offered as a quiet card ("Optional. Only if you'd
   want it there."), never shown as an empty section on a bad day.
+- **Signs of a high and signs of a low.** Two more optional lists, offered together as one quiet
+  card straight after the warning signs ("Optional. In your own words, for you to read."). Once
+  either has a line in it, that one stays; an empty one is never shown. They are read by the person
+  and nobody else: no rule, signal or reminder looks at them, nothing is inferred from them, and no
+  diagnosis is named or asked (#523).
 - **Read and edit are one screen**, with no save step, so nobody has to find an edit button in a
   hard moment.
 - **The crisis row** shows the person's own saved resource (§7.3) and opens the crisis screen. It
   never places a call. The footer says "A plan is not a person — reaching one is the point."
 - **Where it appears:** under More, and as a quiet row in "Take a moment" once it has something in
   it. Never as a suggestion card: nothing infers from mood that someone needs it.
+- **A Quick Settings tile**, there only once the person adds it to Quick Settings themselves. It is
+  labelled "Daymark" and nothing else, because Quick Settings is drawn on the lock screen, and its
+  mark is a plain ring. Tapping it asks for the phone's unlock, then the app's PIN when one is set,
+  and then opens the plan (`app/src/main/java/com/daymark/app/tile/SafetyPlanTileService.kt`, #522).
 - **Not the Stanley–Brown form.** That form needs its authors' written permission to be programmed
   into an electronic record. This is the app's own wording, drawing on the general method of safety
   planning, and is labelled **Adapted**: "A plain safety plan in our own words... not a validated or
@@ -466,6 +527,11 @@ times and has no page, so offer once. Not built: #156.
   person chose and leaves the engine's easing as it was.
 - A reminder's notification, or its **Log now** action, opens a fresh entry. Its line is one of the
   fixed, human-written openers (§13.3), in turn.
+- **Start evening check-ins in your sky** (Settings → Reminders → Your check-in, off until turned
+  on) makes an afternoon or evening reminder open on the night sky with the five faces over it; the
+  check-in ends with the new star landing there. The notification reads exactly the same and never
+  names the Sky, and the app lock still comes first. After Awful or Bad, or during a hard time, it
+  ends on the check-in's own closing screen instead (#540).
 - **Try later** sends one more nudge for that reminder an hour later. **Stop asking** switches that
   reminder off; switching it back on in Settings → Reminders undoes it (#195). Home then says, in
   one quiet line, that the reminder is off and that it was switched off from a notification, with a
@@ -551,8 +617,8 @@ decisions rather than a reading of the current moment: #162.
 - **Backup** (Settings → Export backup) writes one JSON file: entries with their activities and
   people, the journal, goals and project steps, sleep logs, treatments, trackers and their values,
   reminders, check-in scores, thought records, the safety plan, life events (with their *hard*
-  mark), the sky's seed, colour choice, constellations and put-away memories, each tracker's *Show
-  in my sky*, people and the notes about them, group sharing defaults, custom mood names and colours, the crisis line the person
+  mark), the sky's seed, colour choice, constellations, put-away memories, star names, showers
+  and places, each habit's set time, each tracker's *Show in my sky*, people and the notes about them, group sharing defaults, custom mood names and colours, the crisis line the person
   set (#370), and photos embedded in the file. "Replace all" takes the file's crisis line; "Merge"
   takes it only while the phone still shows the default; a file without one leaves the phone's.
   The crisis line's number travels with it (#482), and so does the reminders' answer to "ease off
@@ -568,6 +634,12 @@ decisions rather than a reading of the current moment: #162.
   one transaction, the file's photos are written to a staging folder and swapped in only after it
   commits, and every reminder and tracker check-in is re-armed whether the restore succeeded or
   not (#487).
+- **Check a backup opens** (Settings → Check a backup opens) reads a chosen backup file the way a
+  restore would and changes nothing. It says "This backup opens" with the day and time the file was
+  made and how many mood entries and journal pages it holds; a file from a newer version says it
+  can be restored once Daymark is updated; anything else says "This file can't be restored", never
+  a guessed cause. Every answer ends "Nothing on this phone was changed." It reads the plain JSON
+  backup; encrypted backups are #236 (#524).
 - **CSV** (Settings → Export as CSV): date, time, mood, activities and note for every entry.
 - **PDF report** (Settings → Export a PDF report, "A printable copy to hand to a clinician. Not
   encrypted.") has four sides, each with one job ([DECISIONS.md](DECISIONS.md) §D8): the glance, the
@@ -589,6 +661,13 @@ decisions rather than a reading of the current moment: #162.
   Save then copies to the place the person picks, so what was checked is what is saved (#198). Back
   returns to the picker or to Settings. The file is made in the app's own cache and deleted when the
   flow ends.
+- **Long gaps beside the person's own.** Side 2 names every stretch of 5 or more days with no
+  entry. Under them, one fixed line gives the person's own longest stretch without entries in the 6
+  months before the report: "The longest stretch without entries in the 6 months before this report
+  was 4 days." Two numbers and nothing else: no word compares them, and no cause is given. The line
+  is left out when the person's entries do not reach back the whole 6 months, and it is read from
+  entry times alone (`app/src/main/java/com/daymark/app/stats/PriorGap.kt`). The preview offers
+  **Compare long gaps** to leave it out before saving (#520).
 - Every export is a plain, unencrypted file, made by the person's own act. Not built: encrypted
   backups and exports: #236.
 

@@ -155,6 +155,12 @@ enum class OfferKind(val key: String) {
      * tracker eases off on its own answers and no other's.
      */
     TRACKER("tracker"),
+
+    /**
+     * An extra question inside a check-in. Its rows carry what the question was about as
+     * [OfferRecord.subject]: a tracker's id, or `stats/CheckInQuestions.kt`'s sleep subject.
+     */
+    QUESTION("question"),
     ;
 
     companion object {

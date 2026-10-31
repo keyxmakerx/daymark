@@ -314,52 +314,81 @@
      fade with their cell, and no mark carries a hue of its own, which is what makes a greyscale
      screenshot of this screen fully readable. */
 
-  /* ---- month grid -------------------------------------------------------- */
+  /* ---- month grid --------------------------------------------------------
+     The Chronicle look, the same as the person's own month: an open grid of hairlines, and the
+     date in a circle, filled in ink for the anchor day. The agenda rail stays beside it, because a
+     clinician reads a day as a list rather than a card. */
 
   .grid {
     width: 100%;
-    border-collapse: separate;
-    border-spacing: 2px;
+    border-collapse: collapse;
     table-layout: fixed;
   }
 
   .grid th {
-    padding: 0 0 var(--space-1);
-    text-align: center;
-    font-weight: 400;
+    padding: var(--space-2);
+    text-align: left;
+    font-size: 0.64rem;
+    font-weight: 650;
+    letter-spacing: 0.13em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
   }
 
   .grid td {
     padding: 0;
+    border-top: 1px solid var(--hairline);
+    border-left: 1px solid var(--hairline);
+  }
+
+  .grid td:first-child {
+    border-left-color: transparent;
   }
 
   /* A cell is a button because it is one: it changes the agenda. Metrics are identical in every
      state so nothing shifts on selection — the day a reader is looking at must not move. */
   .cell {
+    position: relative;
+    isolation: isolate;
     display: flex;
     flex-direction: column;
-    justify-content: space-between;
-    gap: var(--space-1);
+    justify-content: flex-start;
+    gap: 7px;
     width: 100%;
-    min-height: 3.4rem;
-    padding: var(--space-1) var(--space-2) var(--space-2);
-    background: var(--paper-sheet);
-    border: 1px solid var(--hairline);
-    border-radius: var(--radius-sm);
+    min-height: 4.25rem;
+    padding: 8px 6px 6px 9px;
+    background: transparent;
+    border: 0;
+    border-radius: 0;
     color: var(--ink-text);
     text-align: left;
-    transition: background 120ms ease, border-color 120ms ease;
   }
 
-  .cell:hover {
-    background: var(--chrome);
-    border-color: var(--chrome-hair);
+  .cell::before {
+    content: '';
+    position: absolute;
+    inset: 3px;
+    z-index: -1;
+    border-radius: 10px;
+    background: var(--paper-bg);
+    opacity: 0;
+    transition: opacity 200ms ease;
+  }
+
+  .cell:hover::before {
+    opacity: 0.85;
   }
 
   .num {
-    font-size: 0.75rem;
+    display: grid;
+    place-items: center;
+    width: 26px;
+    height: 26px;
+    margin: -3px 0 0 -5px;
+    border-radius: 50%;
+    font-size: 0.8rem;
     line-height: 1;
-    color: var(--ink-soft);
+    color: var(--ink-text);
   }
 
   /* Marks wrap rather than overflow: a day can hold all four kinds. */
@@ -373,26 +402,22 @@
 
   /* Out-of-month padding: still a real date, still readable, visibly not this month. It is not
      hidden, because a hidden cell would make the first and last weeks look truncated. */
-  .cell.out {
-    background: transparent;
-    border-color: transparent;
-    color: var(--ink-faint);
-  }
-
+  .cell.out,
   .cell.out .num {
     color: var(--ink-faint);
   }
 
-  /* Today, and the selected day: structure, so both are indigo. Neither says anything about the
-     day's contents — an unmarked ring on an empty day is still an empty day. */
-  .cell.anchor {
-    border-color: var(--indigo);
+  /* The anchor day is its date filled in ink; the selected day a soft ground with an edge. Both
+     are structure. Neither says anything about the day's contents. */
+  .cell.anchor .num {
+    background: var(--ink-accent);
+    color: var(--on-accent);
+    font-weight: 650;
   }
 
-  .cell.picked {
-    background: var(--indigo-wash);
-    border-color: var(--indigo);
-    box-shadow: inset 0 0 0 1px var(--indigo);
+  .cell.picked::before {
+    opacity: 1;
+    box-shadow: inset 0 0 0 1px var(--border-strong);
   }
 
   /* ---- legend ------------------------------------------------------------ */

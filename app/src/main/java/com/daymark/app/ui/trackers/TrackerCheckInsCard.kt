@@ -121,6 +121,12 @@ fun TrackerCheckInsCard(tracker: Tracker, onChange: (Tracker) -> Unit) {
                     TimeRow("Until", tracker.windowEnd) { picking = TimeField.UNTIL }
                 }
                 RhythmOption(
+                    title = "In my check-in",
+                    detail = "Asked after you check in, at most once a day. No notification of its own.",
+                    selected = rhythm == Rhythm.IN_CHECK_IN,
+                    onSelect = { choose(tracker.copy(rhythm = Rhythm.IN_CHECK_IN.key)) },
+                )
+                RhythmOption(
                     title = "Don't ask",
                     detail = "You log it yourself, from here.",
                     selected = rhythm == Rhythm.DONT_ASK,

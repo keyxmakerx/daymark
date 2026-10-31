@@ -122,7 +122,10 @@ export class PortalClient {
 
   private async req(path: string, init: RequestInit = {}): Promise<Response> {
     // credentials:'include' so the HttpOnly session cookie rides state-changing + blob calls.
-    return this.doFetch(this.base + path, { credentials: 'include', ...init })
+    // `(0, this.doFetch)(...)` calls the fetch detached, with no receiver. Called as a method, a
+    // browser's fetch refuses any receiver but the window, so the bare global handed in by a
+    // caller fails every request in a real browser and in no test runner (#494, fetchCalls.test.ts).
+    return (0, this.doFetch)(this.base + path, { credentials: 'include', ...init })
   }
 
   /*

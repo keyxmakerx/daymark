@@ -285,7 +285,7 @@ private fun MarkThisDayBlock(marks: List<LifeEvent>, onMark: () -> Unit) {
 }
 
 @Composable
-private fun MarkThisDayDialog(
+internal fun MarkThisDayDialog(
     dateLabel: String,
     onDismiss: () -> Unit,
     onConfirm: (String) -> Unit,

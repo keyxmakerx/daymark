@@ -37,6 +37,13 @@ interface GoalDao {
     @Query("SELECT id, reachedAt AS epochMillis FROM goals WHERE reachedAt IS NOT NULL")
     fun observeSkyPoints(): Flow<List<SkyStampPoint>>
 
+    /**
+     * The habits with a set time, for their pulsars (#519). No title, and no column that says
+     * whether or how often the habit was done: a pulsar marks the time only (`DECISIONS.md` §D6).
+     */
+    @Query("SELECT id, createdAt, atMinute FROM goals WHERE kind = 'habit' AND archived = 0 AND atMinute IS NOT NULL")
+    fun observeSkyHabits(): Flow<List<com.daymark.app.data.SkyHabitPoint>>
+
     @Query("SELECT * FROM goals WHERE id = :id")
     suspend fun getById(id: Long): Goal?
 

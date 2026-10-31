@@ -967,13 +967,18 @@ export const NO_SINGLE_FIGURE =
   'enter, because it turns three different kinds of not-knowing into one confident figure. Read ' +
   'the panels.'
 
+/**
+ * What the administrator sign-in (#322) protects on this screen, and what it does not (#496).
+ * The sign-in is what AdminGate asks for before it mounts this console. The three readings above are
+ * the public probes (/healthz, /readyz, /v1/config) and answer anyone without it.
+ */
+export const CREDENTIAL_POSTURE_TITLE = 'What signing in protects'
+
 export const CREDENTIAL_POSTURE =
-  'This build defines no administrator identity. There is no setting that configures one and no ' +
-  'route that authenticates one, so this console presents no credential and holds no authority ' +
-  'that whoever opened it did not already have. The three endpoints it reads are unauthenticated ' +
-  'and answer anyone who can reach the app. Serve this route where you would serve a shell, not ' +
-  'where you would serve the clinician console — and note that a chain run pasted in below sits in this ' +
-  'browser tab for as long as the tab is open.'
+  'Your sign-in, a name and an authenticator code, is what this page asks for before it opens the ' +
+  'console. It does not guard the three readings above. Those come from public endpoints that answer anyone ' +
+  'who can reach the server, signed in or not. A chain run pasted in below stays in this browser ' +
+  'tab for as long as the tab is open.'
 
 /* ═══════════════════════════════════════════════════════════════════════════════════════════
    6. When the readings were taken.

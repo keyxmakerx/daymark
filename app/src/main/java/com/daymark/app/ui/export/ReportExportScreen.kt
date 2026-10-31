@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -42,6 +43,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.daymark.app.export.PdfExportOptions
+import com.daymark.app.ui.components.DaymarkSwitch
 import com.daymark.app.ui.components.PaperSurface
 
 /**
@@ -103,7 +105,11 @@ private fun ReportPreview(
     viewModel: ReportPreviewViewModel = hiltViewModel(),
 ) {
     BackHandler(onBack = onBack)
-    LaunchedEffect(options) { viewModel.preview(options) }
+    // The gap comparison is switched here, on the pages themselves, so the person sees the line
+    // before deciding to leave it out (#520). Each change rebuilds the one file that is saved.
+    var compareGaps by remember { mutableStateOf(options.includeGapComparison) }
+    val shown = options.copy(includeGapComparison = compareGaps)
+    LaunchedEffect(shown) { viewModel.preview(shown) }
     LaunchedEffect(Unit) {
         viewModel.saves.collect { if (it.saved) onSaved(it.message) else onShowMessage(it.message) }
     }
@@ -168,13 +174,31 @@ private fun ReportPreview(
                         style = MaterialTheme.typography.bodyMedium,
                     )
                 }
-                is ReportPreviewState.Ready -> items(s.pageCount) { index ->
-                    ReportPage(
-                        index = index,
-                        pageCount = s.pageCount,
-                        aspect = options.paperSize.widthPt.toFloat() / options.paperSize.heightPt,
-                        load = viewModel::page,
-                    )
+                is ReportPreviewState.Ready -> {
+                    if (s.gapComparable) {
+                        item {
+                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                                Column(Modifier.weight(1f)) {
+                                    Text("Compare long gaps", style = MaterialTheme.typography.bodyLarge)
+                                    Text(
+                                        "Side 2 gives your longest stretch without entries in the 6 months before, as a number.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                                DaymarkSwitch(checked = compareGaps, onCheckedChange = { compareGaps = it })
+                            }
+                        }
+                    }
+                    items(s.pageCount) { index ->
+                        ReportPage(
+                            index = index,
+                            pageCount = s.pageCount,
+                            build = s.build,
+                            aspect = options.paperSize.widthPt.toFloat() / options.paperSize.heightPt,
+                            load = viewModel::page,
+                        )
+                    }
                 }
             }
         }
@@ -185,13 +209,16 @@ private fun ReportPreview(
 private fun ReportPage(
     index: Int,
     pageCount: Int,
+    build: Int,
     aspect: Float,
     load: suspend (Int, Int) -> Bitmap?,
 ) {
     BoxWithConstraints(Modifier.fillMaxWidth()) {
         val widthPx = with(LocalDensity.current) { maxWidth.roundToPx() }
-        var bitmap by remember(index) { mutableStateOf<Bitmap?>(null) }
-        LaunchedEffect(index, widthPx) { bitmap = load(index, widthPx) }
+        // Keyed on the build too: switching the gap comparison rebuilds the file, and a page drawn
+        // from the last one would show what is no longer going to be saved.
+        var bitmap by remember(index, build) { mutableStateOf<Bitmap?>(null) }
+        LaunchedEffect(index, widthPx, build) { bitmap = load(index, widthPx) }
         val description = "Page ${index + 1} of $pageCount"
         val shown = bitmap
         if (shown == null) {

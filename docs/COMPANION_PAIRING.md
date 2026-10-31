@@ -93,7 +93,7 @@ once, and no call needs to be scheduled.
 
 | # | Who | What happens | Request |
 | --- | --- | --- | --- |
-| 0 | Owner | Mints an invitation for a relationship; gets the link. Optionally asks the server to email it | `POST /v1/invite` |
+| 0 | Owner | Mints an invitation for a relationship; gets the link, which the owner console can also draw as a QR code for a clinician in the room (`companion/web/src/lib/components/phones/QrTile.svelte`). Optionally asks the server to email it | `POST /v1/invite` |
 | 1 | Owner | Draws a code, derives MSGa, posts it with a fresh 16-byte session id | `POST /v1/relations/{relRef}/pairing` |
 | 2 | Clinician | Types the code and a name; fetches MSGa, which also tells the browser the relationship reference | `POST /v1/invite/{inviteId}/pairing/fetch` |
 | 3 | Clinician | Generates keys (only now, once the relationship is known), wraps them under a reading passphrase, derives MSGb and the key, seals **E1** (their public keys, the name, an enrolment ticket they chose), posts MSGb and E1 once | `…/pairing/{exchangeId}/respond` |

@@ -24,6 +24,7 @@ class SkyPutAwaySchemaTest {
     /** Each statement the migration runs, its literals joined, the statements apart. */
     private val v23: String = database.substringAfter("val MIGRATION_22_23 = object")
         .substringBefore("val DEFAULT_ACTIVITIES")
+        .substringBefore("val MIGRATION_23_24")
         .split("db.execSQL(").drop(1)
         .joinToString("; ") { call -> Regex("\"([^\"]*)\"").findAll(call).joinToString("") { it.groupValues[1] } }
 
@@ -84,7 +85,7 @@ class SkyPutAwaySchemaTest {
         assertTrue(database.contains("fun skyPutAwayDao()"))
         assertTrue(module.contains("fun provideSkyPutAwayDao("))
         assertTrue(module.contains("AppDatabase.MIGRATION_22_23,"))
-        assertTrue(database.contains("version = 23,"))
+        assertTrue(Regex("""version = (\d+),""").find(database)!!.groupValues[1].toInt() >= 23)
     }
 
     private fun strip(source: String): String = source
