@@ -7,6 +7,10 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Added
+- **Pick your crisis line from a list.** Where you set your crisis line, **Pick from a list of
+  national lines** offers lines for ten countries. Picking one fills in the fields for you to check
+  and save; you can still change anything. Daymark never looks at where you are to choose for you,
+  and the list shows the date it was last checked (#521).
 - **You can call your crisis line from the app.** Once you've said the line is right for you, the
   crisis screen has a **Call** button, and **Text** where the line takes texts. Each opens your
   phone's own dialer or messages app with the number filled in; Daymark never places a call. The

@@ -301,6 +301,13 @@ recommending, never setting, how often the support space is offered: #172.
   line** and **Not now**. It is never guessed from the phone's region or location, and a blank name
   or contact is never saved. Someone who set Daymark up before onboarding asked is asked once, on
   Home, with the same three answers; any answer ends it (#482).
+- **A list to pick from.** Wherever the line is set (onboarding, Home's one-time check, the crisis
+  screen), **Pick from a list of national lines** opens a short bundled list in country order
+  (`app/src/main/java/com/daymark/app/data/CrisisLineDirectory.kt`). Picking one fills in the
+  fields and nothing else: the person reads them, can change any of them, and saves as if they had
+  typed them. Nothing reads the phone's region, SIM, language or location to choose or sort the
+  list. Every entry names the page its number came from and the day it was last checked, and the
+  list shows that date under it (#521).
 - **Call and Text.** The line has a number of its own, apart from the free-text contact, and once
   the person has confirmed the line (kept it when asked, or typed their own) the crisis screen shows
   **Call** and, where the line takes texts, **Text**. Each opens the phone's own dialer or messages
