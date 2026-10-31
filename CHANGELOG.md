@@ -7,6 +7,12 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Added
+- **Clinicians can run session timers in the Companion.** The clinician console has a **Timers**
+  tab with presets for a session, a medication review, an assessment, a break and writing notes,
+  or a timer of your own, each with an optional nudge before the end. Each one tells you the way
+  you choose: a soft chime, a buzz on a phone, a notification your watch can show as a tap, or a
+  quiet banner. The banner always shows, on every tab, and says so when the device couldn't chime,
+  buzz or notify. Timers stay in the browser and never name a client.
 - **You can call your crisis line from the app.** Once you've said the line is right for you, the
   crisis screen has a **Call** button, and **Text** where the line takes texts. Each opens your
   phone's own dialer or messages app with the number filled in; Daymark never places a call. The
