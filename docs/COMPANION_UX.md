@@ -38,7 +38,9 @@ been built differently. The old text is
    share less, for less time (§9).
 5. **Every surface says what it is for.** The owner console shares, pairs, opens a backup and runs
    self-checks. It is a desk-side complement to the phone (#247): printing first, then bigger
-   read-only views, and no view grades a day. Writing and the Sky stay on the phone. A backup open
+   read-only views, and no view grades a day. Writing stays on the phone, and so does every change
+   to the Sky; the Sky itself is to be shown here to look at ([DECISIONS.md](DECISIONS.md) §D11).
+   Not built: #440. A backup open
    in the viewer or the owner console shows its own month calendar (§7.11). Not built: printing or
    saving the report from the browser, #334; journal search, sleep trends and the dashboard's other
    views, #245.

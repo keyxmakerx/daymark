@@ -622,11 +622,15 @@ list structure, "March 2024, 6 items", because a list without it is unnavigable:
 
 - **Not in the clinician report**, on none of its four sides ([§D8](DECISIONS.md)).
 - **Not in a share, a grant or a sync.** Life events leave the phone only in the person's own backup.
+  The owner's own web console is to show the sky to look at, with every change staying on the phone
+  ([§D11](DECISIONS.md)). Not built: #440.
 - **Not in telemetry or diagnostics**, including derived values: no star counts, no kind mix, no "sky
   opened" event.
 - **No share button and no export** (§11 question 2). An export, if ever built, uses the system
   document picker and carries a one-time note, worded from existing privacy copy, that the image is
-  unusually identifying (§6.5): a gallery is what a forgotten cloud-photo app copies.
+  unusually identifying (§6.5): a gallery is what a forgotten cloud-photo app copies. A background
+  made from the sky, of space alone or with the stars after the same kind of note, is decided
+  ([§D11](DECISIONS.md)). Not built: #534.
 - **Behind the app lock**, like the journal. With the lock on, the window is marked secure, so
   screenshots and the recent-apps thumbnail do not show it.
 

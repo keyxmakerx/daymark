@@ -356,8 +356,9 @@ it and `docs/SKY.md` describes what is built. Built: every star a memory, the th
 clusters, the opening and a new star's birth, zoom down to suns, constellations and their photo, the
 Key, the supernova, putting memories away and bringing them back with black and white holes,
 nebulae, the sky's own colours and changing them, "Reset my sky", and tracker objects. Not built:
-dark matter (#450) and the other objects, #449. Where the prototype and this decision
-disagree, this decision governs the build.
+dark matter (#450) and the other objects, #449; the sky in the owner's web console, #440;
+backgrounds made from the sky, #534. Where the prototype and this decision disagree, this decision
+governs the build.
 
 **Decision.**
 - **Every star is one memory.** There are no decorative stars; the space behind them is colour, gas
@@ -392,6 +393,14 @@ disagree, this decision governs the build.
 - **The Key stays, and leads with "red only means old".** It lists only what is in that person's
   sky.
 - **Any tap skips the opening.** With reduced motion, the sky opens still, on today.
+- **On the web the sky is to look at, and every change to it stays on the phone.** The owner's own
+  web console shows the sky full screen, laid out wide, with its panels beside it; drawing a
+  constellation, naming a star and putting memories away or bringing them back happen only on the
+  phone. It is never shown in a clinician's view, a share or a grant.
+- **The sky can make a background**, of space alone or with the person's stars. Space alone comes
+  from the seed and nothing else: its colours, dust and gas, with no star, memory, date or count in
+  it. A background with stars is set only after a one-time note that anyone who sees the screen sees
+  the shape of the person's record (`docs/SKY.md` §6.5).
 - **Never**: a moon or land; anything framed as depression or as memories being eaten; a meteor
   shower on a day the person did not choose; a pulsar for a habit without a set time; device location
   for a place.
@@ -400,7 +409,10 @@ disagree, this decision governs the build.
 rewards, the supernova, the black hole closing, skipping the opening and the Key's first line. The
 maintainer added the forms on 2026-10-04: a river in every sky would make them all alike. The
 maintainer chose varied brightness on 2026-10-25: a sky in which every star burns alike reads as a
-pattern of dots rather than a sky, and brightness drawn from identity ranks no day.
+pattern of dots rather than a sky, and brightness drawn from identity ranks no day. The maintainer
+chose the web sky and backgrounds on 2026-10-31: a browser cannot hold the app lock or keep a
+screenshot from being taken, so changes to the sky stay where those protections hold, and a
+background with stars is the person's to choose once they have been told what it shows.
 
 ---
 
@@ -448,8 +460,8 @@ Smaller decisions were made in GitHub issues and are recorded there:
   before the first public release.
 - **#246:** English only, until a named human translator and a separate human reviewer take on a
   language.
-- **#247:** the owner's web console adds printing and bigger read-only views, never writing or the
-  Sky.
+- **#247:** the owner's web console adds printing and bigger read-only views, never writing. The Sky
+  joins it to look at only (§D11).
 - **#251:** titles use a bundled Fraunces, and all other text keeps the platform's own sans.
 - **#263:** the consoles get a type scale and motion tokens, and no icon set or global search.
 - **#264:** the Companion offers only self-written questionnaires and names the phone's published
