@@ -9,25 +9,25 @@
  * is frozen at that (the maintainer's 2026-10-30 sign-off); building a duty adds it here.
  *
  * A duty is here only when a person can do it today from a console this server serves. Each value
- * is the file that does it, and built.test.ts checks every one exists, so a removed screen cannot
- * leave a duty still claimed as built.
+ * names that console, and built.test.ts reads the console's source for the call that does it, so
+ * a removed screen cannot leave a duty still claimed as built.
  */
 import type { PracticeCapability } from './capabilities'
 
-export const BUILT: Partial<Record<PracticeCapability, string>> = {
-  // The practice console (OrgRoutes.kt).
-  'member.manage': 'companion/web/src/lib/components/practice/AddMemberPanel.svelte',
-  'role.assign': 'companion/web/src/lib/components/practice/RosterPanel.svelte',
-  'audit.review': 'companion/web/src/lib/components/practice/AuditPanel.svelte',
-  // The clinician console, for a client who granted it.
-  'assign.questionnaire': 'companion/web/src/lib/components/therapist/AssignSurface.svelte',
-  'assign.task': 'companion/web/src/lib/components/therapist/AssignSurface.svelte',
-  'assign.goal': 'companion/web/src/lib/components/therapist/AssignSurface.svelte',
-  'assign.reminder': 'companion/web/src/lib/components/therapist/AssignSurface.svelte',
-  'authorGamePlan': 'companion/web/src/lib/therapist/gamePlan.ts',
-  // The server console.
-  'server.operate': 'companion/web/src/lib/components/admin/AdminConsole.svelte',
-  'ops.metrics': 'companion/web/src/lib/components/admin/AdminConsole.svelte',
+export type BuiltIn = 'practice console' | 'clinician console' | 'server console'
+
+export const BUILT: Partial<Record<PracticeCapability, BuiltIn>> = {
+  'member.manage': 'practice console',
+  'role.assign': 'practice console',
+  'audit.review': 'practice console',
+  // For a client who granted it.
+  'assign.questionnaire': 'clinician console',
+  'assign.task': 'clinician console',
+  'assign.goal': 'clinician console',
+  'assign.reminder': 'clinician console',
+  authorGamePlan: 'clinician console',
+  'server.operate': 'server console',
+  'ops.metrics': 'server console',
 }
 
 /** The chip a duty with no route and no screen carries, wherever a role's duties are listed. */
