@@ -24,7 +24,14 @@
    * renders whether or not the screen is open: an alert that only showed on the Timers tab would
    * be lost on every other one.
    */
-  let { open = true }: { open?: boolean } = $props()
+  let {
+    open = true,
+    presets = PRESETS,
+  }: {
+    open?: boolean
+    /** The presets in the order this clinician reaches for them (therapist/discipline.ts). */
+    presets?: readonly { label: string; minutes: number; nudgeMin: number }[]
+  } = $props()
 
   let timers = $state<Timer[]>([])
   let now = $state(Date.now())
@@ -172,7 +179,7 @@
 <section class="stack" aria-labelledby="presets-h">
   <h2 class="sec" id="presets-h">Start one</h2>
   <div class="tiles">
-    {#each PRESETS as p}
+    {#each presets as p (p.label)}
       <button type="button" class="tile" onclick={() => start(p.label, p.minutes, p.nudgeMin)}>
         <span class="kick">{p.minutes} min</span>
         <b>{p.label}</b>

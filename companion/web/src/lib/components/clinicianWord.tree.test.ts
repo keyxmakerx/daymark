@@ -150,6 +150,7 @@ const IDENTIFIERS: { value: string; because: string }[] = [
   { value: 'daymark.therapist.share-seen.v1', because: 'a storage key' },
   { value: 'daymark.pairing.therapist-run.v1', because: 'a storage key' },
   { value: 'therapist-app', because: 'the element id therapist.html mounts on' },
+  { value: 'Therapist', because: 'the discipline a clinician picks for themselves on their own console (therapist/discipline.ts), beside Psychologist and Psychiatrist; it names their own job to them, never the person a client shares with' },
   { value: '#therapist-app mount point missing', because: 'a developer error naming that element id; it fires only when the HTML shell is broken' },
 ]
 const ALLOWED = new Set(IDENTIFIERS.map((i) => i.value))

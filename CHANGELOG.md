@@ -7,6 +7,11 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Added
+- **The clinician console knows whether you're a therapist, a psychologist or a psychiatrist.**
+  Pick one under **I work as a**, and the tabs lead with what that work reaches for first: today
+  and the calendar, the record of self-checks, or today with sleep beside mood. Timers lead with
+  your own kind of appointment. It never changes what you can read; that still comes only from
+  what the client shares.
 - **Clinicians can run session timers in the Companion.** The clinician console has a **Timers**
   tab with presets for a session, a medication review, an assessment, a break and writing notes,
   or a timer of your own, each with an optional nudge before the end. Each one tells you the way

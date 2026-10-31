@@ -287,7 +287,17 @@ So the protection is the **patient's own Revoke**, which stops future delivery o
 shows who has standing access, with Revoke beside it, on every owner screen. The practice console's
 remove-member confirmation says removal ends a standing in the practice and nobody's relationship.
 
-## 9b. Session timers
+## 9b. Which kind of clinician
+
+The console asks **I work as a** Therapist, Psychologist or Psychiatrist, and remembers the answer in
+this browser (`companion/web/src/lib/therapist/discipline.ts`). It changes the console's arrangement
+and nothing it can read: the read tabs still sit behind the client's grant. A therapist's tabs lead
+with Today and the Calendar, a psychologist's with the Record of self-checks over time, and a
+psychiatrist's with Today, where sleep sits beside mood. The Timers tab leads with each one's own
+preset: a session, an assessment or a medication review. Not built: a Medication tab for the
+psychiatrist, because medication records are not part of a share yet (#542).
+
+## 9c. Session timers
 
 The console's **Timers** tab runs timers for sessions, breaks and the time between, with presets
 (Session 50 minutes, Medication review 25, Assessment 110, Break 10, Writing notes 10) and a timer of

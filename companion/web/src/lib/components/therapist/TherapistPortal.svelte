@@ -24,6 +24,11 @@
   import CalendarScreen from './CalendarScreen.svelte'
   import ClientRecordScreen from './ClientRecordScreen.svelte'
   import TimersScreen from '../timers/TimersScreen.svelte'
+  import { PRESETS } from '../../timers/timers'
+  import {
+    DISCIPLINES, PROFILES, defaultDisciplineStorage, loadDiscipline, presetsFor, saveDiscipline,
+    type Discipline,
+  } from '../../therapist/discipline'
   import type { BackupData } from '../../backup'
   import LowerAssuranceBanner from './LowerAssuranceBanner.svelte'
   import { Callout } from '../ui'
@@ -34,6 +39,17 @@
   let grant = $state<Grant | null>(null)
   let grantError = $state('')
   let tab = $state<Tab>('allowed')
+
+  /*
+   * Which kind of clinician is at this console. It reorders the read tabs and leads the timers with this discipline's own preset; it gates nothing (discipline.ts).
+   */
+  const disciplineStore = defaultDisciplineStorage()
+  let discipline = $state<Discipline>(loadDiscipline(disciplineStore))
+  const profile = $derived(PROFILES[discipline])
+  function chooseDiscipline(d: Discipline) {
+    discipline = d
+    saveDiscipline(disciplineStore, d)
+  }
 
   /*
    * The opened share, held HERE rather than fetched per tab.
@@ -253,10 +269,17 @@
             Calendar tab to someone with no read.share would advertise a surface that can only ever
             be empty for them.
           -->
-          <button class:active={tab === 'today'} aria-pressed={tab === 'today'} onclick={() => (tab = 'today')}>Today</button>
-          <button class:active={tab === 'calendar'} aria-pressed={tab === 'calendar'} onclick={() => (tab = 'calendar')}>Calendar</button>
-          <button class:active={tab === 'record'} aria-pressed={tab === 'record'} onclick={() => (tab = 'record')}>Record</button>
-          <button class:active={tab === 'shared'} aria-pressed={tab === 'shared'} onclick={() => (tab = 'shared')}>Shared data</button>
+          {#each profile.tabOrder as t (t)}
+            {#if t === 'today'}
+              <button class:active={tab === 'today'} aria-pressed={tab === 'today'} onclick={() => (tab = 'today')}>Today</button>
+            {:else if t === 'calendar'}
+              <button class:active={tab === 'calendar'} aria-pressed={tab === 'calendar'} onclick={() => (tab = 'calendar')}>Calendar</button>
+            {:else if t === 'record'}
+              <button class:active={tab === 'record'} aria-pressed={tab === 'record'} onclick={() => (tab = 'record')}>Record</button>
+            {:else}
+              <button class:active={tab === 'shared'} aria-pressed={tab === 'shared'} onclick={() => (tab = 'shared')}>Shared data</button>
+            {/if}
+          {/each}
         {/if}
         <!--
           Not behind any capability: a timer reads nothing of the client's and is kept in this
@@ -265,6 +288,16 @@
         <button class:active={tab === 'timers'} aria-pressed={tab === 'timers'} onclick={() => (tab = 'timers')}>Timers</button>
       </nav>
       <button class="lock" onclick={logout}>Log out</button>
+    </div>
+
+    <div class="discipline">
+      <span class="d-label" id="discipline-l">I work as a</span>
+      <div class="seg" role="radiogroup" aria-labelledby="discipline-l">
+        {#each DISCIPLINES as d (d)}
+          <button type="button" role="radio" aria-checked={discipline === d} onclick={() => chooseDiscipline(d)}>{PROFILES[d].label}</button>
+        {/each}
+      </div>
+      <span class="d-note">{profile.leadsWith} It changes how this console is arranged, never what you can read.</span>
     </div>
 
     {#if grantError}
@@ -276,7 +309,7 @@
       session timer still ends on time, and its banner still shows, while the clinician reads the
       record.
     -->
-    <TimersScreen open={tab === 'timers'} />
+    <TimersScreen open={tab === 'timers'} presets={presetsFor(discipline, PRESETS)} />
 
     {#if grant && tab !== 'timers'}
       {#if tab === 'allowed'}
@@ -339,6 +372,13 @@
   }
   .topline { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); flex-wrap: wrap; }
   .tabs { display: flex; gap: var(--space-2); flex-wrap: wrap; }
+  .discipline { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); }
+  .d-label { font-size: 0.78rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-soft); }
+  .d-note { flex-basis: 100%; font-size: 0.86rem; color: var(--ink-soft); }
+  .seg { display: inline-flex; flex-wrap: wrap; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); overflow: hidden; background: var(--paper-sheet); }
+  .seg button { border: 0; border-radius: 0; background: transparent; padding: 0.35rem 0.75rem; font-size: 0.88rem; min-height: 2.25rem; }
+  .seg button + button { border-left: 1px solid var(--hairline); }
+  .seg button[aria-checked='true'] { background: var(--indigo); color: var(--on-accent); }
 
   /*
    * The selected section is STRUCTURE — where you are in the interface — so it takes the
