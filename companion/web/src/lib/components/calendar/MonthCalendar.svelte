@@ -22,6 +22,13 @@
    *    the panel and the controls are left off the paper.
    *
    * `now` is read once, when the month is opened, to find today; a calendar is not a stopwatch.
+   *
+   * THE CHRONICLE LOOK (the signed-off Companion mockup). One soft card with a faint light in its
+   * corner, the month's name large in the display serif, an open grid of hairlines, and the date in
+   * a circle, filled in ink for today. Choosing a day opens its card from that day: beside it on a
+   * wide screen, above or below it on a narrow one, with the rest of the month faded back. Escape,
+   * the close button or a click anywhere else closes it, and focus goes back to the day. Changing
+   * month fades from one to the next, and not at all when the person asks for less motion.
    */
   import type { BackupData } from '../../backup'
   import {
@@ -61,25 +68,105 @@
   let chosen = $state<EpochDay | null>(null)
   const records = $derived(chosen === null ? [] : dayRecords(buckets.get(chosen)?.events ?? [], data.moodLabels))
 
-  function toToday() {
-    offset = 0
-    chosen = today
+  /* Where the day card sits, in the month card's own coordinates. */
+  let cardEl = $state<HTMLElement | null>(null)
+  let rootEl = $state<HTMLElement | null>(null)
+  let from: HTMLElement | null = null
+  let pos = $state({ left: 0, top: 0, width: 0 })
+  let fading = $state(false)
+
+  const reducedMotion = () =>
+    typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches
+
+  function place(dayEl: HTMLElement) {
+    if (!rootEl) return
+    const box = rootEl.getBoundingClientRect()
+    const d = dayEl.getBoundingClientRect()
+    const gap = 8
+    const narrow = box.width < 640
+    const width = narrow ? box.width - 2 * gap : Math.min(304, box.width - 2 * gap)
+    let left: number
+    let top: number
+    if (narrow) {
+      left = gap
+      // Below the day when the card fits there, otherwise above it.
+      const below = d.bottom - box.top + gap
+      top = below + 320 < box.height ? below : Math.max(gap, d.top - box.top - 320 - gap)
+    } else {
+      const right = d.right - box.left + gap
+      left = right + width + gap <= box.width ? right : Math.max(gap, d.left - box.left - width - gap)
+      top = Math.max(gap, Math.min(d.top - box.top, box.height - 340))
+    }
+    pos = { left, top, width }
   }
+
+  function choose(day: EpochDay, el: HTMLElement) {
+    from = el
+    chosen = day
+    place(el)
+    queueMicrotask(() => cardEl?.querySelector<HTMLElement>('.panel-day')?.focus())
+  }
+
+  function close() {
+    if (chosen === null) return
+    chosen = null
+    from?.focus()
+  }
+
+  function step(n: number) {
+    chosen = null
+    if (reducedMotion()) {
+      offset += n
+      return
+    }
+    fading = true
+    setTimeout(() => {
+      offset += n
+      fading = false
+    }, 160)
+  }
+
+  function toToday() {
+    chosen = null
+    offset = 0
+  }
+
+  $effect(() => {
+    if (chosen === null) return
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && close()
+    const onDown = (e: PointerEvent) => {
+      const t = e.target as Node
+      if (cardEl?.contains(t)) return
+      if (t instanceof Element && t.closest('.day')) return
+      close()
+    }
+    window.addEventListener('keydown', onKey)
+    window.addEventListener('pointerdown', onDown)
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      window.removeEventListener('pointerdown', onDown)
+    }
+  })
 </script>
 
-<div class="own-month" data-print-root="month">
+<div class="own-month" data-print-root="month" bind:this={rootEl}>
+  <div class="glow" aria-hidden="true"></div>
   <div class="head">
-    <h3 class="title" aria-live="polite">{month.title}</h3>
-    <div class="controls">
-      <button type="button" onclick={() => (offset -= 1)}>Previous month</button>
-      <button type="button" onclick={toToday}>Today</button>
-      <button type="button" onclick={() => (offset += 1)}>Next month</button>
-      <button type="button" onclick={() => printMonth(browserPrintPort())}>Print this month</button>
+    <span class="kicker">Your month</span>
+    <div class="hrow">
+      <h3 class="title" aria-live="polite">{month.title}</h3>
+      <div class="controls">
+        <button type="button" class="ib" aria-label="Previous month" onclick={() => step(-1)}>‹</button>
+        <button type="button" class="tbtn" onclick={toToday}>Today</button>
+        <button type="button" class="ib" aria-label="Next month" onclick={() => step(1)}>›</button>
+        <button type="button" class="tbtn" onclick={() => printMonth(browserPrintPort())}>Print this month</button>
+      </div>
     </div>
+    <p class="prompt">Choose a day to see what was recorded on it.</p>
   </div>
 
   <div class="split">
-    <div class="sheet">
+    <div class="sheet" class:fading class:dim={chosen !== null}>
       <div class="scroll">
         <table class="grid">
           <caption class="visually-hidden">
@@ -105,7 +192,7 @@
                         class:chosen={cell.day === chosen}
                         aria-pressed={cell.day === chosen}
                         aria-label={cell.label}
-                        onclick={() => (chosen = cell.day)}
+                        onclick={(e) => choose(cell.day, e.currentTarget)}
                       >
                         <span class="num" aria-hidden="true">{cell.dayOfMonth}</span>
                         <span class="marks" aria-hidden="true">
@@ -138,76 +225,164 @@
       </ul>
     </div>
 
-    <div class="panel">
-      {#if chosen === null}
-        <p class="prompt">Choose a day to see what was recorded on it.</p>
-      {:else}
-        <h4 class="panel-day">{formatDayLong(chosen)}</h4>
-        {#if records.length === 0}
-          <p class="nothing">Nothing recorded.</p>
-        {:else}
-          <ul class="records">
-            {#each records as record (record.key)}
-              <li class="record">
-                <span class="kind">{KIND_LABEL[record.kind]}</span>
-                {#if record.time}<span class="when u-mono">{record.time}</span>{/if}
-                {#if record.mood}<MoodMark level={record.mood.level} word={record.mood.word} {palette} />{/if}
-                {#if record.text}<span class="what">{record.text}</span>{/if}
-              </li>
-            {/each}
-          </ul>
-        {/if}
-      {/if}
-    </div>
+    {#if chosen !== null}
+      <div
+        class="panel"
+        role="dialog"
+        aria-label="What was recorded on this day"
+        bind:this={cardEl}
+        style:left="{pos.left}px"
+        style:top="{pos.top}px"
+        style:width="{pos.width}px"
+      >
+        <div class="crease">
+          <span>The day</span>
+          <button type="button" class="x" aria-label="Close" onclick={close}>×</button>
+        </div>
+        <div class="card-body">
+          <h4 class="panel-day" tabindex="-1">{formatDayLong(chosen)}</h4>
+          {#if records.length === 0}
+            <p class="nothing">Nothing recorded.</p>
+          {:else}
+            <ul class="records">
+              {#each records as record (record.key)}
+                <li class="record">
+                  <span class="kind">{KIND_LABEL[record.kind]}</span>
+                  {#if record.time}<span class="when u-mono">{record.time}</span>{/if}
+                  {#if record.mood}<MoodMark level={record.mood.level} word={record.mood.word} {palette} />{/if}
+                  {#if record.text}<span class="what">{record.text}</span>{/if}
+                </li>
+              {/each}
+            </ul>
+          {/if}
+        </div>
+      </div>
+    {/if}
   </div>
 </div>
 
 <style>
+  /* One soft card, with a faint cool light in its top corner. It is the positioning frame for the
+     day card, which opens over the month rather than beside it. */
   .own-month {
+    position: relative;
+    isolation: isolate;
     display: flex;
     flex-direction: column;
-    gap: var(--space-3);
+    gap: var(--space-2);
+    padding: var(--space-4) var(--space-4) var(--space-3);
+    background: var(--paper-sheet);
+    border: 1px solid var(--hairline);
+    border-radius: 20px;
+    box-shadow: var(--elevation);
+  }
+
+  .glow {
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: inherit;
+    pointer-events: none;
+    background: radial-gradient(90% 70% at 8% -8%, color-mix(in srgb, var(--indigo-wash) 70%, transparent), transparent 62%);
   }
 
   .head {
     display: flex;
-    align-items: baseline;
+    flex-direction: column;
+    gap: var(--space-1);
+  }
+
+  .hrow {
+    display: flex;
+    align-items: center;
     justify-content: space-between;
     flex-wrap: wrap;
-    gap: var(--space-2) var(--space-4);
+    gap: var(--space-2) var(--space-3);
+  }
+
+  .kicker {
+    font-size: 0.68rem;
+    font-weight: 650;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
   }
 
   .title {
-    font-size: 1.05rem;
+    margin: 0;
+    font-family: var(--font-display);
+    font-weight: 500;
+    font-size: clamp(1.6rem, 4vw, 2.2rem);
+    line-height: 1.08;
+    letter-spacing: -0.012em;
+  }
+
+  .prompt {
+    margin: 0;
+    font-size: 0.86rem;
+    color: var(--ink-soft);
   }
 
   .controls {
     display: flex;
     flex-wrap: wrap;
-    gap: var(--space-2);
+    align-items: center;
+    gap: 2px;
   }
 
   .controls button {
-    padding: var(--space-1) var(--space-3);
+    border: 0;
+    background: transparent;
+    color: var(--ink-soft);
+    transition: background-color 200ms ease, color 200ms ease;
+  }
+
+  .controls button:hover {
+    background: var(--paper-bg);
+    color: var(--ink-text);
+  }
+
+  .ib {
+    width: 2.5rem;
+    height: 2.5rem;
+    padding: 0;
+    border-radius: 50%;
+    font-size: 1.25rem;
+    line-height: 1;
+  }
+
+  .tbtn {
+    min-height: 2.25rem;
+    padding: 0 0.8rem;
+    border-radius: 9px;
     font-size: 0.85rem;
+    font-weight: 550;
   }
 
-  /* Grid beside the panel on a wide window, stacked on a narrow one. */
   .split {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) 15rem;
-    gap: var(--space-4);
-    align-items: start;
-  }
-
-  @media (max-width: 56rem) {
-    .split {
-      grid-template-columns: minmax(0, 1fr);
-    }
+    display: block;
   }
 
   .sheet {
     min-width: 0;
+    transition: opacity 320ms ease;
+  }
+
+  /* Changing month fades out, swaps, and fades back in. */
+  .sheet.fading {
+    opacity: 0;
+  }
+
+  /* With a day open, the rest of the month steps back; the open day keeps full ink. */
+  .sheet.dim .day:not(.chosen) {
+    opacity: 0.5;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .sheet,
+    .day {
+      transition: none;
+    }
   }
 
   /* On a narrow screen the month keeps a readable width and scrolls inside its own box, so a
@@ -219,50 +394,80 @@
   .grid {
     width: 100%;
     min-width: 30rem;
-    border-collapse: separate;
-    border-spacing: 3px;
+    border-collapse: collapse;
     table-layout: fixed;
   }
 
   .grid th {
-    padding: 0 0 var(--space-1);
-    text-align: center;
-    font-weight: 400;
+    padding: var(--space-2) var(--space-2) var(--space-2);
+    text-align: left;
+    font-size: 0.64rem;
+    font-weight: 650;
+    letter-spacing: 0.13em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
   }
 
-  /* The 1px height is what lets a day fill its cell: every day in a week is as tall as the fullest
-     one, so no day is drawn smaller for holding less. */
+  /* An open grid of hairlines: one across the top of each week, one between days. The 1px height
+     lets a day fill its cell, so every day in a week is as tall as the fullest one. */
   .grid td {
     height: 1px;
     padding: 0;
     vertical-align: top;
+    border-top: 1px solid var(--hairline);
+    border-left: 1px solid var(--hairline);
   }
 
-  /* Every day is this square, whatever it holds: the same paper, the same edge, the number in the
-     same ink. Nothing here is chosen by what a day holds. */
+  .grid td:first-child {
+    border-left-color: transparent;
+  }
+
+  /* Every day is this cell, whatever it holds: the same ground, the number in the same ink.
+     Nothing here is chosen by what a day holds. */
   .day {
+    position: relative;
+    isolation: isolate;
     display: flex;
     flex-direction: column;
-    align-items: stretch;
+    align-items: flex-start;
     justify-content: flex-start;
-    gap: var(--space-1);
+    gap: 7px;
     width: 100%;
     height: 100%;
-    min-height: 4.75rem;
-    padding: var(--space-1) var(--space-2) var(--space-2);
-    background: var(--paper-sheet);
-    border: 1px solid var(--hairline);
-    border-radius: var(--radius-sm);
+    min-height: 5.25rem;
+    padding: 8px 6px 6px 9px;
+    background: transparent;
+    border: 0;
+    border-radius: 0;
     color: var(--ink-text);
     text-align: left;
+    transition: opacity 320ms ease;
   }
 
-  .day:hover {
-    border-color: var(--border-strong);
+  .day::before {
+    content: '';
+    position: absolute;
+    inset: 3px;
+    z-index: -1;
+    border-radius: 10px;
+    background: var(--paper-bg);
+    opacity: 0;
+    transition: opacity 200ms ease;
+  }
+
+  .day:hover::before {
+    opacity: 0.85;
   }
 
   .num {
-    font-size: 0.8rem;
+    display: grid;
+    place-items: center;
+    width: 26px;
+    height: 26px;
+    margin: -3px 0 0 -5px;
+    border-radius: 50%;
+    font-size: 0.82rem;
+    font-weight: 500;
     line-height: 1;
     font-variant-numeric: tabular-nums;
     color: var(--ink-text);
@@ -276,16 +481,17 @@
     min-width: 0;
   }
 
-  /* Today, and the chosen day: structure, so both are indigo. Neither says anything about what the
-     day holds — a ringed day with nothing on it is still a day with nothing on it. */
-  .day.today {
-    border-color: var(--indigo);
+  /* Today is the date filled in ink; the open day is a soft ground with an edge. Both are
+     structure. Neither says anything about what the day holds. */
+  .day.today .num {
+    background: var(--ink-accent);
+    color: var(--on-accent);
+    font-weight: 650;
   }
 
-  .day.chosen {
-    background: var(--indigo-wash);
-    border-color: var(--indigo);
-    box-shadow: inset 0 0 0 1px var(--indigo);
+  .day.chosen::before {
+    opacity: 1;
+    box-shadow: inset 0 0 0 1px var(--border-strong);
   }
 
   /* ---- legend: the shapes, named in words, so the month reads in greyscale and on paper ---- */
@@ -318,26 +524,79 @@
     color: var(--chrome-soft);
   }
 
-  /* ---- the day panel: the chosen day in words ---- */
+  /* ---- the day card: the chosen day in words, opened from the day ---- */
 
   .panel {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-    padding: var(--space-3);
-    background: var(--paper-bg);
+    position: absolute;
+    z-index: 20;
+    max-height: 24rem;
+    overflow: auto;
+    overscroll-behavior: contain;
+    background: var(--paper-sheet);
     border: 1px solid var(--hairline);
-    border-radius: var(--radius-sm);
+    border-radius: 14px;
+    box-shadow: var(--elevation);
+    animation: grow 320ms cubic-bezier(0.2, 0, 0, 1) both;
   }
 
-  .prompt {
-    margin: 0;
-    font-size: 0.85rem;
+  @keyframes grow {
+    from { opacity: 0; transform: scale(0.96); }
+    to { opacity: 1; transform: none; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .panel { animation: none; }
+  }
+
+  .crease {
+    position: sticky;
+    top: 0;
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    min-height: 2.5rem;
+    padding: 4px 6px 4px 16px;
+    background: var(--paper-sheet);
+    border-bottom: 1px dashed var(--hairline);
+    font-size: 0.66rem;
+    font-weight: 650;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
     color: var(--ink-soft);
   }
 
+  .x {
+    margin-left: auto;
+    width: 2rem;
+    height: 2rem;
+    padding: 0;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--ink-soft);
+    font-size: 1.15rem;
+    line-height: 1;
+  }
+
+  .x:hover {
+    background: var(--paper-bg);
+    color: var(--ink-text);
+  }
+
+  .card-body {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    padding: var(--space-3) var(--space-4) var(--space-4);
+  }
+
   .panel-day {
-    font-size: 0.95rem;
+    margin: 0;
+    font-family: var(--font-display);
+    font-weight: 500;
+    font-size: 1.4rem;
+    line-height: 1.12;
+    outline: none;
   }
 
   .nothing {
@@ -406,12 +665,30 @@
       break-inside: avoid;
     }
 
-    .day,
-    .day.today,
-    .day.chosen {
-      background: transparent;
-      border-color: var(--ink-faint);
+    .own-month {
       box-shadow: none;
+      border-color: var(--ink-faint);
+    }
+
+    .glow {
+      display: none;
+    }
+
+    .day::before {
+      opacity: 0;
+    }
+
+    .grid td {
+      border-color: var(--ink-faint);
+    }
+
+    .day.today .num {
+      background: transparent;
+      color: var(--ink-text);
+    }
+
+    .sheet.dim .day:not(.chosen) {
+      opacity: 1;
     }
 
     /* While the month is printing, everything that neither is the month, holds it, nor sits inside

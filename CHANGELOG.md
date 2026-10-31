@@ -30,6 +30,10 @@ All notable changes to this project are documented here. The format is based on
   feel like too much**, which always leads to the crisis screen (#482).
 
 ### Changed
+- **Your month in the Companion is the calmer Chronicle calendar.** It's one soft card with the
+  month's name in large type, an open grid, and today's date filled in. Pressing a day opens its card
+  right from that day, and the rest of the month fades back. Escape, the × or a click anywhere else
+  closes it. Changing month fades gently, or not at all if you've asked your device for less motion.
 - **Stars look like stars.** Each one is a sharp point of light: a white-hot heart in its own
   colour, paled toward white, with a tight wing of light round it the way a star's light spreads in
   the eye, and no rays, spikes, hard edge or grey disc round it. A life event is still the one
