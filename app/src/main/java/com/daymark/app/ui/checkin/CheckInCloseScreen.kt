@@ -149,7 +149,7 @@ private fun QuestionStep(
         PaperSurface(modifier = Modifier.fillMaxWidth()) {
             Text(
                 if (tracker == null) {
-                    "You keep a sleep diary, and it's morning. Last night isn't in it yet."
+                    "You keep a sleep diary, and it's morning. There's room in it for last night."
                 } else {
                     "You chose to have this asked when you check in."
                 },
