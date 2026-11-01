@@ -2,6 +2,7 @@ package com.daymark.companion.routes
 
 import com.daymark.companion.auth.AttemptBudget
 import com.daymark.companion.auth.CredentialKind
+import com.daymark.companion.auth.DeviceSignature
 import com.daymark.companion.auth.OWNER_COOKIE
 import com.daymark.companion.auth.OwnerAuth
 import com.daymark.companion.auth.OwnerPrincipal
@@ -36,7 +37,12 @@ private fun auditSafely(block: () -> Unit) {
 
 /** Whether the owner's account exists, and so whether the shared token is still a credential. */
 @Serializable data class OwnerAccountStatusDto(val exists: Boolean, val tokenAccepted: Boolean)
-@Serializable data class OwnerAccountCreateRequest(val name: String, val totpSecret: String, val totpCode: String)
+/**
+ * Making the account: a name, a TOTP seed and a code from it, and the owner's recovery public key
+ * (#325), the one key that can later replace the sign-in. It is derived from the master the console
+ * has just unlocked, so the account cannot be made without it.
+ */
+@Serializable data class OwnerAccountCreateRequest(val name: String, val totpSecret: String, val totpCode: String, val recoveryPublicKey: String)
 @Serializable data class OwnerSignInRequest(val name: String, val code: String)
 @Serializable data class OwnerSessionDto(val name: String, val csrfToken: String, val absoluteExpiry: Long)
 @Serializable data class OwnerOverviewDto(val name: String, val csrfToken: String)
@@ -112,6 +118,11 @@ fun Route.ownerAccountRoutes(
             call.respond(HttpStatusCode.BadRequest, ErrorDto("the authenticator key could not be read; start again"))
             return@post
         }
+        val recoveryKey = DeviceSignature.decodeCanonical(req.recoveryPublicKey, DeviceSignature.PUBLIC_KEY_BYTES)
+        if (recoveryKey == null || !DeviceSignature.isUsablePublicKey(recoveryKey)) {
+            call.respond(HttpStatusCode.BadRequest, ErrorDto("the recovery key could not be read; unlock the console again and start again"))
+            return@post
+        }
         val step = Totp.verifyStep(secret, req.totpCode.trim(), clock() / 1000)
         if (step == null) {
             call.respond(
@@ -120,7 +131,7 @@ fun Route.ownerAccountRoutes(
             )
             return@post
         }
-        val made = signIn.create(name, Base64.getUrlEncoder().withoutPadding().encodeToString(secret), step)
+        val made = signIn.create(name, Base64.getUrlEncoder().withoutPadding().encodeToString(secret), step, req.recoveryPublicKey)
         if (made != OwnerSignIn.CreateStatus.OK) {
             call.respond(HttpStatusCode.Conflict, ErrorDto("this server's owner account is already made; sign in instead"))
             return@post
@@ -240,7 +251,7 @@ private suspend fun ApplicationCall.accountOnly(auth: OwnerAuth): OwnerPrincipal
     return null
 }
 
-private suspend fun startOwnerSession(call: ApplicationCall, signIn: OwnerSignIn, name: String, absoluteSeconds: Long, cookieSecure: Boolean) {
+internal suspend fun startOwnerSession(call: ApplicationCall, signIn: OwnerSignIn, name: String, absoluteSeconds: Long, cookieSecure: Boolean) {
     val session = signIn.createSession(absoluteSeconds)
     call.response.cookies.append(
         Cookie(

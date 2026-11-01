@@ -259,6 +259,12 @@ enum class AuditAction(val wire: String) {
      */
     OWNER_ACCOUNT_CREATED("owner.account_created"),
 
+    /**
+     * The owner proved their recovery key and made a new sign-in (#325); every earlier owner session
+     * ended with it. Carries no name, code or key.
+     */
+    OWNER_RECOVERED("owner.recovered"),
+
     /** The owner minted a credential for the command-line writer (#324). Its objectRef is the credential's id. */
     CLI_CREDENTIAL_ISSUED("cli.issued"),
 

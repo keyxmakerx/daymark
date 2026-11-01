@@ -2,9 +2,7 @@ package com.daymark.companion
 
 import com.daymark.companion.auth.AuthGuard
 import com.daymark.companion.auth.OwnerAuth
-import com.daymark.companion.mail.InMemoryMailTransport
 import com.daymark.companion.mail.Mailer
-import com.daymark.companion.mail.MailerConfig
 import com.daymark.companion.routes.KEY_DOCUMENT_HEADER
 import com.daymark.companion.routes.KEY_DOCUMENT_VERSION_HEADER
 import com.daymark.companion.routes.PHONE_REFUSED_ROUTES
@@ -33,7 +31,6 @@ import io.ktor.server.routing.routing
 import io.ktor.server.testing.testApplication
 import java.io.File
 import java.sql.DriverManager
-import kotlinx.coroutines.delay
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -81,24 +78,9 @@ class PhoneRouteRuleTest {
         assertEquals(1, practices(server.dataDir))
     }
 
-    /** The server's mail, kept: what the recovery flow sent, and to whom. */
-    private fun keptMail(): Pair<Mailer, InMemoryMailTransport> {
-        val transport = InMemoryMailTransport()
-        val cfg = MailerConfig(host = "mail.example.org", port = 587, user = null, pass = null, from = "companion@example.org", tls = MailerConfig.TlsMode.STARTTLS)
-        return Mailer.forConfig(cfg, transport) to transport
-    }
-
-    /** The recovery mail is sent in the background: wait for [count] messages, then a moment for any stray one. */
-    private suspend fun awaitSent(transport: InMemoryMailTransport, count: Int) {
-        val deadline = System.currentTimeMillis() + 5_000
-        while (transport.sent.size < count && System.currentTimeMillis() < deadline) delay(20)
-        delay(200)
-    }
-
     @Test
-    fun `a stolen phone's key cannot change where recovery mail goes, so it cannot have the console's token re-issued`() = testApplication {
-        val (mailer, sent) = keptMail()
-        val server = DeviceServer(mailer = mailer)
+    fun `a stolen phone's key cannot change where the owner's notices go`() = testApplication {
+        val server = DeviceServer()
         server.start(this)
         val stolen = TestPhone()
         val other = TestPhone()
@@ -109,13 +91,10 @@ class PhoneRouteRuleTest {
             contentType(ContentType.Application.Json)
             setBody("""{"email":"$email","events":[]}""")
         }
-        suspend fun askForRecovery(email: String) = client.post("/v1/recovery/request") {
-            contentType(ContentType.Application.Json)
-            setBody("""{"email":"$email"}""")
-        }
         assertEquals(HttpStatusCode.NoContent, putByToken("owner@example.org").status)
 
-        // Whoever holds the stolen phone's key sets the address to theirs, and asks for a re-issue there.
+        // Whoever holds the stolen phone's key sets the address to theirs. No address gets anyone back
+        // in any more (#325), but the notices, the recovery receipt among them, are the owner's.
         val theirs = """{"email":"thief@example.org","events":[]}"""
         val byPhone = client.put("/v1/owner/notifications") {
             signedWith(stolen.headers("PUT", "/v1/owner/notifications", theirs.toByteArray(), server.seconds))
@@ -124,13 +103,6 @@ class PhoneRouteRuleTest {
         }
         assertEquals(phoneRefused, byPhone.status to byPhone.bodyAsText())
         assertEquals("owner@example.org", server.account.registeredEmail(), "the address is as the owner set it")
-        assertEquals(HttpStatusCode.Accepted, askForRecovery("thief@example.org").status, "the recovery flow answers every request the same")
-
-        // Control: the owner's own request is mailed, to the owner, so the flow was live and a link to
-        // the thief would have been seen here.
-        assertEquals(HttpStatusCode.Accepted, askForRecovery("owner@example.org").status)
-        awaitSent(sent, 1)
-        assertEquals(listOf("owner@example.org"), sent.sent.map { it.to }, "one link, and it went to the owner")
 
         // The console's token and the owner's other phone are as they were.
         val devices = client.get("/v1/devices") { header(HttpHeaders.Authorization, "Bearer ${server.authToken}") }

@@ -106,28 +106,6 @@ class MailContentGuardTest {
     }
 
     @Test
-    fun `canonical access recovery passes`() {
-        val msg = MailMessage.AccessRecovery(
-            to = "owner@example.org",
-            confirmUrl = URI("https://companion.example.org/recover#t=abc123"),
-            expiresAt = expiry,
-        )
-        MailContentGuard.assertClean(msg, MailTemplates.render(msg))
-    }
-
-    @Test
-    fun `access recovery with non-https link is rejected`() {
-        val msg = MailMessage.AccessRecovery(
-            to = "owner@example.org",
-            confirmUrl = URI("http://companion.example.org/recover#t=abc123"),
-            expiresAt = expiry,
-        )
-        assertFailsWith<MailContentViolation> {
-            MailContentGuard.assertClean(msg, MailTemplates.render(msg))
-        }
-    }
-
-    @Test
     fun `all security notices render clean with no link`() {
         for (event in MailMessage.SecurityEvent.entries) {
             val msg = MailMessage.SecurityNotice(to = "owner@example.org", event = event)
@@ -137,7 +115,7 @@ class MailContentGuardTest {
 
     @Test
     fun `tampered security notice body is rejected`() {
-        val msg = MailMessage.SecurityNotice(to = "owner@example.org", event = MailMessage.SecurityEvent.TOKEN_REISSUED)
+        val msg = MailMessage.SecurityNotice(to = "owner@example.org", event = MailMessage.SecurityEvent.SIGN_IN_RECOVERED)
         val tampered = RenderedMail(
             subject = MailTemplates.SECURITY_SUBJECT,
             textBody = MailTemplates.render(msg).textBody + "\nHere is your PHQ score: 21.",

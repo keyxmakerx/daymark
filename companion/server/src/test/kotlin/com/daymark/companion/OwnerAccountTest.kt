@@ -34,6 +34,14 @@ import kotlin.test.assertTrue
  */
 class OwnerAccountTest {
 
+    private companion object {
+        /** A usable Ed25519 public key: the recovery key every account is made with (#325). */
+        val RECOVERY_KEY: String = ByteArray(32).let { pk ->
+            org.bouncycastle.math.ec.rfc8032.Ed25519.generatePublicKey(ByteArray(32) { 9 }, 0, pk, 0)
+            Base64.getUrlEncoder().withoutPadding().encodeToString(pk)
+        }
+    }
+
     private val seed = ByteArray(20) { (it * 11 + 5).toByte() }
     private val seedB64 = Base64.getUrlEncoder().withoutPadding().encodeToString(seed)
     private fun code(server: DeviceServer, offsetSteps: Long = 0) = Totp.code(seed, server.seconds + offsetSteps * 30)
@@ -87,7 +95,7 @@ class OwnerAccountTest {
         client.post("/v1/owner/account") {
             header(HttpHeaders.Authorization, "Bearer $token")
             contentType(ContentType.Application.Json)
-            setBody("""{"name":"Sam","totpSecret":"$seedB64","totpCode":"$totp"}""")
+            setBody("""{"name":"Sam","totpSecret":"$seedB64","totpCode":"$totp","recoveryPublicKey":"$RECOVERY_KEY"}""")
         }
 
     @Test
@@ -154,7 +162,7 @@ class OwnerAccountTest {
             val again = client.post("/v1/owner/account") {
                 first.session().auth(this)
                 contentType(ContentType.Application.Json)
-                setBody("""{"name":"Other","totpSecret":"$seedB64","totpCode":"${code(server, 1)}"}""")
+                setBody("""{"name":"Other","totpSecret":"$seedB64","totpCode":"${code(server, 1)}","recoveryPublicKey":"$RECOVERY_KEY"}""")
             }
             assertEquals(HttpStatusCode.Conflict, again.status)
             assertEquals(1, server.ownerLog().count { it == "owner.account_created" })
@@ -300,13 +308,13 @@ class OwnerAccountTest {
     }
 
     @Test
-    fun `the emailed token reset is gone once the account exists`() {
+    fun `the emailed token reset is gone, before the account and after it`() {
         val server = DeviceServer()
         testApplication {
             server.start(this)
             val before = client.post("/v1/recovery/request") { contentType(ContentType.Application.Json); setBody("""{"email":"a@example.com"}""") }
-            assertEquals(HttpStatusCode.Accepted, before.status)
-            createAccount(client, server)
+            assertEquals(HttpStatusCode.NotFound, before.status)
+            assertEquals(HttpStatusCode.OK, createAccount(client, server).status, "control: the server is up and takes the account")
             val after = client.post("/v1/recovery/request") { contentType(ContentType.Application.Json); setBody("""{"email":"a@example.com"}""") }
             assertEquals(HttpStatusCode.NotFound, after.status)
             val confirm = client.post("/v1/recovery/confirm") { contentType(ContentType.Application.Json); setBody("""{"confirmToken":"x"}""") }

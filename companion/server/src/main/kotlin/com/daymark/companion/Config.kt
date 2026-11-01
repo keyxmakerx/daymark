@@ -83,14 +83,6 @@ data class Config(
     val auditRetentionDays: Long = 90L,
     val auditSourceIpEnabled: Boolean = false,
     /**
-     * The owner's access-token recovery: the unauthenticated request endpoint is capped at this
-     * many attempts per source per hour (COMPANION_SECURITY.md §6, "Owner notifications and
-     * server-access recovery").
-     */
-    val reissueMaxPerHour: Int = 3,
-    /** How long a minted recovery-confirmation link stays valid before it is GONE. */
-    val reissueConfirmTtlSeconds: Long = 3600L,
-    /**
      * Whether the therapist session cookie carries the `Secure` attribute. TRUE by default
      * (the portal requires a real TLS origin, per COMPANION_SECURITY.md §5.4; what that means for
      * a LAN deployment is still open, in #205). Only set false (`DAYMARK_COOKIE_INSECURE`) for a
@@ -233,8 +225,6 @@ data class Config(
                 auditRetentionDays = env["DAYMARK_ACCESS_LOG_RETENTION_DAYS"]?.trim()?.toLongOrNull() ?: 90L,
                 auditSourceIpEnabled = env["DAYMARK_ACCESS_LOG_SOURCE_IP"]?.trim()
                     .let { it == "1" || it.equals("true", true) },
-                reissueMaxPerHour = env["DAYMARK_REISSUE_MAX_PER_HOUR"]?.trim()?.toIntOrNull() ?: 3,
-                reissueConfirmTtlSeconds = env["DAYMARK_REISSUE_CONFIRM_TTL_SECONDS"]?.trim()?.toLongOrNull() ?: 3600L,
                 trustedProxies = ClientAddress.parseTrusted(env["DAYMARK_TRUSTED_PROXIES"]),
             )
             refuseUnsafe(

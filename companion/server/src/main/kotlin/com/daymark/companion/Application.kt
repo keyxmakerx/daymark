@@ -24,7 +24,8 @@ import com.daymark.companion.routes.auditRoutes
 import com.daymark.companion.routes.deviceRoutes
 import com.daymark.companion.routes.orgRoutes
 import com.daymark.companion.routes.pairingRelayRoutes
-import com.daymark.companion.routes.recoveryRoutes
+import com.daymark.companion.routes.notificationRoutes
+import com.daymark.companion.routes.ownerRecoveryRoutes
 import com.daymark.companion.routes.relationRoutes
 import com.daymark.companion.routes.relationshipEndingRoutes
 import com.daymark.companion.routes.syncRoutes
@@ -441,6 +442,20 @@ fun Application.module(
                 cookieSecure = config.cookieSecure,
                 auditSourceIp = config.auditSourceIpEnabled,
             )
+            // Getting back in by the owner's own key once the sign-in is lost (#325).
+            ownerRecoveryRoutes(
+                signIn = ownerAuth.signIn!!,
+                accountStore = account!!,
+                keyDocuments = keyDocuments,
+                ownerAudit = ownerAudit,
+                mailer = mail,
+                publicBaseUrl = config.publicBaseUrl,
+                challengeBudget = TokenBucketLimiter(burst = ADMIN_ATTEMPT_BURST, refillIntervalMs = ADMIN_ATTEMPT_REFILL_MS),
+                recoverBudget = TokenBucketLimiter(burst = ADMIN_ATTEMPT_BURST, refillIntervalMs = ADMIN_ATTEMPT_REFILL_MS),
+                sessionAbsoluteSeconds = config.sessionAbsoluteSeconds,
+                cookieSecure = config.cookieSecure,
+                auditSourceIp = config.auditSourceIpEnabled,
+            )
             // Pairing a phone and the phones paired (#186, #189): part of the sync API, since a phone
             // pairs to sync, so on in every shape with it.
             deviceRoutes(
@@ -468,6 +483,8 @@ fun Application.module(
             get("/v1/owner/account") { call.respond(HttpStatusCode.ServiceUnavailable, ErrorDto("sync API not configured")) }
             post("/v1/owner/account") { call.respond(HttpStatusCode.ServiceUnavailable, ErrorDto("sync API not configured")) }
             post("/v1/owner/session") { call.respond(HttpStatusCode.ServiceUnavailable, ErrorDto("sync API not configured")) }
+            post("/v1/owner/recovery/challenge") { call.respond(HttpStatusCode.ServiceUnavailable, ErrorDto("sync API not configured")) }
+            post("/v1/owner/recovery") { call.respond(HttpStatusCode.ServiceUnavailable, ErrorDto("sync API not configured")) }
         }
 
         // The clinician group (#330): on in paired and practice. Fail-closed: when it is off, every
@@ -564,25 +581,14 @@ fun Application.module(
             practiceGroupOff()
         }
 
-        // The owner's email (COMPANION_SECURITY.md §6, "Owner notifications and server-access
-        // recovery"): notification-email registration + the unauthenticated access-token recovery
-        // flow. Gated on the sync/owner bearer token being configured at all (independent of the
-        // therapist portal — recovery covers plain /v1 sync access too), fail-closed to 503
-        // otherwise so a probe cannot tell configured-but-empty from absent.
+        // The owner's notification email (COMPANION_SECURITY.md §6, "Owner notifications"). Gated
+        // on the owner bearer token being configured at all, fail-closed to 503 otherwise so a probe
+        // cannot tell configured-but-empty from absent. No email gets anyone back in (#325).
         if (account != null && ownerAuth != null && notifier != null) {
-            recoveryRoutes(
-                accountStore = account,
-                ownerGuard = ownerAuth,
-                mailer = mail,
-                confirmTtlSeconds = config.reissueConfirmTtlSeconds,
-                reissueMaxPerHour = config.reissueMaxPerHour,
-                publicBaseUrl = config.publicBaseUrl,
-                ownerAudit = ownerAudit,
-            )
+            notificationRoutes(accountStore = account, ownerGuard = ownerAuth)
         } else {
-            get("/v1/owner/notifications") { call.respond(HttpStatusCode.ServiceUnavailable, ErrorDto("recovery not configured")) }
-            put("/v1/owner/notifications") { call.respond(HttpStatusCode.ServiceUnavailable, ErrorDto("recovery not configured")) }
-            post("/v1/recovery/{...}") { call.respond(HttpStatusCode.ServiceUnavailable, ErrorDto("recovery not configured")) }
+            get("/v1/owner/notifications") { call.respond(HttpStatusCode.ServiceUnavailable, ErrorDto("notifications not configured")) }
+            put("/v1/owner/notifications") { call.respond(HttpStatusCode.ServiceUnavailable, ErrorDto("notifications not configured")) }
         }
 
         // The therapist portal is a SEPARATE surface served at its own route. Map the clean path
