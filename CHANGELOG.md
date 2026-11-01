@@ -7,6 +7,10 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Added
+- **The year grid reads like a calendar, and keeps a day's ups and downs.** Insights → Year → Grid
+  and Year in Pixels now show twelve small month calendars, so every day sits under its weekday. A
+  day with more than one mood is split, its highest above its lowest, instead of being averaged
+  into a mood it never was. Days still to come are left blank.
 - **An invitation can be shown as a code.** After you create an invite link for a clinician, **Show
   as a code** draws it as a QR code, so a clinician in the room can open it with their phone's
   camera instead of being sent the link. The screen says that anyone who can see it can open it,

@@ -197,7 +197,7 @@ fun InsightsScreen(
                     } else {
                         YearInPixelsGrid(
                             year = year.year,
-                            dayMoods = year.dayMoods,
+                            dayLevels = year.dayLevels,
                             modifier = Modifier.padding(top = 8.dp),
                         )
                     }

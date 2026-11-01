@@ -167,8 +167,12 @@ entries are stars in the Sky (§4), and reach the PDF report only when the perso
   newest entry of every mood it holds; its own page lists every entry). Nothing is averaged or blended, and a day with no entry is the same square with
   no dots. A screen reader hears the date and each dot's mood in the person's own words ("3
   September: Good, Meh"), or "nothing recorded". Tapping a day opens its entries. **Year** is either a
-  night-card of stars or a grid of coloured squares (Year in Pixels, also under More), and leads to
-  **Review my year**.
+  night-card of stars or a grid (Year in Pixels, also under More), and leads to **Review my year**.
+  The grid is twelve small month calendars, Monday first, so each day sits under its weekday. A day
+  is never averaged: a day of one mood is a square in that mood's colour, and a day of more than one
+  is split, its highest mood above its lowest, so an Awful morning and a Rad night never read as a
+  Meh day. A day with no entry is a faint square and a day still to come is blank
+  (`stats/YearGrid.kt`).
 - **Average mood by activity** sets each of the eight most-logged activities beside the average
   mood of the entries that carry it, listed by name and never best-first. Nothing ranks activities
   or trackers by mood, and no `r` is shown: the person reads the table and draws their own
