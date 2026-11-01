@@ -277,7 +277,7 @@ class SyncCrypto(private val sodium: LazySodium) {
             }
             return out
         } finally {
-            secretKey.fill(0)
+            secret.fill(0)
         }
     }
 
