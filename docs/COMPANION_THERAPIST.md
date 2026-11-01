@@ -320,6 +320,18 @@ against the wall clock, so a hidden tab still ends it on time (`companion/web/sr
 Timers stay in the browser: nothing is sent to the server, and no timer names or reads a client.
 No grant is needed for them.
 
+## 9d. Your notes
+
+The console's **Notes** page holds the clinician's own notes about their work with this client
+(DECISIONS.md §D12). A new note follows the discipline: its kind and parts come from §9b, and a note
+keeps the names of its parts, so it reads the same after the discipline changes. Each note has a day
+and tags. Search matches every word typed against a note's kind, day, tags and text, ignoring case
+and accents, and choosing tags narrows to the notes that carry all of them; nothing is ranked or
+written for the clinician (`companion/web/src/lib/notes/notes.ts`). Notes are locked to a key derived
+from the clinician's box key and kept only in this browser; the server never receives them. A plain
+copy can be downloaded, and the page says at the button that the copy is not locked. No grant is
+needed. Not built: a server copy and search across clients, #548.
+
 ## 10. The audit log
 
 See [COMPANION_SECURITY.md](COMPANION_SECURITY.md) §9: events, never content; owner-readable only;

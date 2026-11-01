@@ -7,6 +7,12 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Added
+- **Clinicians can keep their own notes.** The clinician console has a Notes page. Each note follows
+  your discipline's parts, has a day and tags, and can be found by searching any words in it or by
+  choosing tags. Notes are locked to your key and kept only in this browser, so the client and the
+  server cannot read them, and they stay with you if the client stops sharing. You can download a
+  plain copy for your records. Leaving a relationship now warns that your notes cannot be opened
+  afterwards.
 - **An invitation can be shown as a code.** After you create an invite link for a clinician, **Show
   as a code** draws it as a QR code, so a clinician in the room can open it with their phone's
   camera instead of being sent the link. The screen says that anyone who can see it can open it,
