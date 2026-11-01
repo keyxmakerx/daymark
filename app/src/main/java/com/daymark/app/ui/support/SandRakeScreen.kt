@@ -36,8 +36,8 @@ fun SandRakeScreen(onBackToMenu: () -> Unit) {
     val density = LocalDensity.current
     val minStep = with(density) { SandRake.MIN_STEP_DP.dp.toPx() }
     val spacing = with(density) { SandRake.TINE_SPACING_DP.dp.toPx() }
-    val sand = MaterialTheme.colorScheme.surfaceVariant
-    val groove = MaterialTheme.colorScheme.outline
+    val sand = CalmInk.sand
+    val groove = CalmInk.line
     CalmActivityFrame(title = "Sand to rake", onBackToMenu = onBackToMenu) {
         Text(
             "Draw a finger across the sand. There is no pattern to make.",

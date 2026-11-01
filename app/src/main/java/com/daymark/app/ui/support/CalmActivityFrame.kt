@@ -18,6 +18,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.daymark.app.calm.CalmSession
 import kotlinx.coroutines.delay
@@ -63,4 +64,37 @@ internal fun CalmActivityFrame(
             }
         }
     }
+}
+
+/**
+ * The colours every calm activity draws with, all semantic roles (`CLAUDE.md` §4) and never a mood
+ * colour. The app's palette is paper and ink, and every container role in it is the hairline
+ * (`ui/theme/Theme.kt`), so a piece drawn in a container role on a hairline ground is invisible.
+ * The pieces and lines are therefore inks, and the grounds are the sheet and the hairline.
+ * `TakeAMomentSourceTest` resolves each role in both schemes and holds every piece off its ground.
+ */
+internal object CalmInk {
+    /** What the blocks and the shelf are drawn on: the sheet. */
+    val ground: Color
+        @Composable get() = MaterialTheme.colorScheme.surface
+
+    /** The sand: the hairline, which reads as pale sand on the paper. */
+    val sand: Color
+        @Composable get() = MaterialTheme.colorScheme.surfaceVariant
+
+    /** Three muted inks for the blocks and the books. */
+    val shades: List<Color>
+        @Composable get() = listOf(
+            MaterialTheme.colorScheme.tertiary,
+            MaterialTheme.colorScheme.secondary.copy(alpha = 0.6f),
+            MaterialTheme.colorScheme.secondary,
+        )
+
+    /** A groove in the sand, and a shape's landing outline. */
+    val line: Color
+        @Composable get() = MaterialTheme.colorScheme.tertiary
+
+    /** The shelves themselves. */
+    val shelf: Color
+        @Composable get() = MaterialTheme.colorScheme.secondary
 }
