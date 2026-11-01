@@ -28,6 +28,7 @@ import com.daymark.companion.routes.notificationRoutes
 import com.daymark.companion.routes.ownerRecoveryRoutes
 import com.daymark.companion.routes.relationRoutes
 import com.daymark.companion.routes.relationshipEndingRoutes
+import com.daymark.companion.routes.clinicianNotesRoutes
 import com.daymark.companion.routes.syncRoutes
 import com.daymark.companion.routes.therapistAuthRoutes
 import com.daymark.companion.routes.ownerKeyRoutes
@@ -37,6 +38,7 @@ import com.daymark.companion.storage.AuditActor
 import com.daymark.companion.storage.AuditStore
 import com.daymark.companion.storage.BlobStore
 import com.daymark.companion.storage.KeyDocumentStore
+import com.daymark.companion.storage.ClinicianNotesStore
 import com.daymark.companion.storage.RelationStore
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
@@ -297,6 +299,9 @@ fun Application.module(
     val auth = if (shape.clinicianGroup) {
         authStore ?: AuthStore(config.dataDir)
     } else null
+    // Each clinician's own locked notebook (routes/ClinicianNotesRoutes.kt). Same group: notes are
+    // about a relationship and reached only by its clinician's session.
+    val notesStore = if (shape.clinicianGroup) ClinicianNotesStore(config.dataDir) else null
     // Owner-readable audit log (COMPANION_SECURITY.md §9). Same group as the rest of the clinician
     // portal — it only makes sense once relationships/sessions exist.
     val audit = if (shape.clinicianGroup) {
@@ -543,7 +548,11 @@ fun Application.module(
                 sessionIdleSeconds = config.sessionIdleSeconds,
                 auditStore = audit,
                 auditSourceIp = config.auditSourceIpEnabled,
+                notesStore = notesStore,
             )
+            if (notesStore != null) {
+                clinicianNotesRoutes(notesStore, auth, config.sessionIdleSeconds)
+            }
             // The CPace relay: opaque pairing blobs between the owner and a holder of the invite
             // link. The server never has the code and never parses a message — see the routes file.
             pairingRelayRoutes(
@@ -732,6 +741,7 @@ private fun Route.clinicianGroupOff() {
     post("/v1/webauthn/{...}", groupOff)
     get("/v1/relations/{...}", groupOff)
     post("/v1/relations/{...}", groupOff)
+    put("/v1/relations/{...}", groupOff)
 }
 
 /**

@@ -3,22 +3,25 @@
    * The clinician's own notes: write, tag, search, and keep a plain copy.
    *
    * What this screen must keep true:
-   * - The notes are the clinician's writing, locked to the clinician's own key in this browser
-   *   (notes/vault.ts). Nothing here sends them anywhere, and nothing reads the client's share.
-   * - A notebook that did not open is reported, never overwritten (vault.ts save()).
+   * - The notes are the clinician's writing, locked to the clinician's own key (notes/vault.ts).
+   *   Only the sealed blob leaves this page, to the clinician's own copy on the server
+   *   (notes/sync.ts), and nothing here reads the client's share.
+   * - A notebook that did not open, here or on the server, is reported and never overwritten.
+   * - The browser's copy is kept first, so a server that cannot be reached loses no note.
    * - Search and tags are rules over the clinician's own words (notes.ts); nothing is ranked,
    *   suggested or written for them.
    * - The plain copy is said to be unlocked at the point of the click, because it is.
    */
   import { onDestroy } from 'svelte'
   import {
-    draftProblem, exportText, findNotes, keepDraft, removeNote, tagCounts, upsert,
-    type Note, type NoteSection,
+    deleteFromNotebook, draftProblem, emptyNotebook, exportText, findNotes, keepDraft, tagCounts, upsert,
+    type Note, type Notebook, type NoteSection,
   } from '../../notes/notes'
   import {
     defaultNotesStorage, forgetLock, load, notesLock, save, NotesNotKept,
     type Loaded, type NotesLock,
   } from '../../notes/vault'
+  import { reconcile, type NotesRemote, type RemoteState } from '../../notes/sync'
 
   let {
     boxPrivateKey,
@@ -26,6 +29,7 @@
     kind,
     sections,
     now,
+    remote = null,
   }: {
     boxPrivateKey: Uint8Array
     therapistFp: string
@@ -34,13 +38,17 @@
     /** The parts a new note offers, from the discipline. */
     sections: readonly { id: string; label: string }[]
     now: number
+    /** The clinician's own locked copy on the server, or null to keep notes in this browser only. */
+    remote?: NotesRemote | null
   } = $props()
 
   const storage = defaultNotesStorage()
   let lock: NotesLock | null = null
   let loaded = $state<Loaded['state'] | 'opening'>('opening')
-  let notes = $state<Note[]>([])
+  let book = $state<Notebook>(emptyNotebook())
+  const notes = $derived(book.notes)
   let problem = $state('')
+  let server = $state<RemoteState | 'checking' | 'off'>('off')
 
   $effect(() => {
     const sk = boxPrivateKey
@@ -54,7 +62,9 @@
       const r = await load(storage, l)
       if (cancelled) return
       loaded = r.state
-      notes = r.state === 'ready' ? r.notes : []
+      book = r.state === 'ready' ? r.book : emptyNotebook()
+      server = remote ? 'checking' : 'off'
+      if (r.state === 'ready') await syncWithServer()
     })()
     return () => {
       cancelled = true
@@ -114,17 +124,40 @@
     editing = null
   }
 
-  async function persist(next: Note[]): Promise<boolean> {
+  /*
+   * The server copy catches up after the browser's copy is kept, and brings in anything written
+   * elsewhere. A copy there that did not open is left alone and said so.
+   */
+  async function syncWithServer() {
+    if (!remote || !lock || loaded !== 'ready') {
+      if (server === 'checking') server = 'off'
+      return
+    }
+    const r = await reconcile(lock, remote, $state.snapshot(book) as Notebook)
+    server = r.remote
+    if (r.remote.state === 'kept') {
+      try {
+        await save(storage, lock, loaded, r.book)
+      } catch {
+        // The server holds it; this browser could not. Shown, and the notes are still on screen.
+        problem = 'This browser did not keep its copy, but the copy on the server is up to date.'
+      }
+      book = r.book
+    }
+  }
+
+  async function persist(next: Notebook): Promise<boolean> {
     if (!lock || loaded === 'opening') return false
     try {
       await save(storage, lock, loaded, next)
-      notes = next
+      book = next
       problem = ''
-      return true
     } catch (e) {
       problem = e instanceof NotesNotKept ? e.message : 'The note was not kept.'
       return false
     }
+    void syncWithServer()
+    return true
   }
 
   async function keep() {
@@ -139,7 +172,7 @@
       () => crypto.randomUUID(),
       editing ?? undefined,
     )
-    if (await persist(upsert(notes, n))) {
+    if (await persist({ ...book, notes: upsert(book.notes, n) })) {
       writing = false
       editing = null
     }
@@ -147,7 +180,7 @@
 
   let confirmingDelete = $state<string | null>(null)
   async function remove(id: string) {
-    if (await persist(removeNote(notes, id))) confirmingDelete = null
+    if (await persist(deleteFromNotebook(book, id, Date.now()))) confirmingDelete = null
   }
 
   function download() {
@@ -165,10 +198,29 @@
 </script>
 
 <p class="lede">
-  Your own notes about your work with this client. They are locked to your key and kept only in
-  this browser. The server never receives them, the client cannot read them, and they stay with you
-  if the client stops sharing.
+  {#if remote}
+    Your own notes about your work with this client. They are locked to your key in this browser,
+    and a locked copy is kept on the server that only you can open. The server cannot read them, the
+    client cannot read them, and they stay with you if the client stops sharing.
+  {:else}
+    Your own notes about your work with this client. They are locked to your key and kept only in
+    this browser. The server never receives them, the client cannot read them, and they stay with you
+    if the client stops sharing.
+  {/if}
 </p>
+{#if server === 'checking'}
+  <p class="small soft" role="status">Checking the copy on the server…</p>
+{:else if server !== 'off' && server.state === 'unreached'}
+  <p class="small soft" role="status">
+    Kept in this browser. The copy on the server was not updated this time; it catches up the next
+    time you keep a note or sign in.
+  </p>
+{:else if server !== 'off' && server.state === 'unreadable'}
+  <div class="callout" role="alert">
+    <b>The copy on the server did not open with this key.</b>
+    <span>Nothing has been written over it. Your notes here are kept in this browser only.</span>
+  </div>
+{/if}
 
 {#if loaded === 'opening'}
   <p class="small">Opening your notes…</p>
