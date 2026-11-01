@@ -10,9 +10,9 @@ package com.daymark.app.calm
  * ## What it must keep true
  *
  *  1. **Nothing moves on its own.** There is no gravity and no tick. A shape sits at the top until
- *     the person moves, turns or lets it fall, and each of those is one call here. The screen has
- *     no timer to drive, so there is nothing for reduced motion to slow down (`docs/FEATURES.md`
- *     §7.2 rule 3).
+ *     the person moves, turns or lets it fall, and each of those is one call here. The screen may
+ *     show a fall as a short slide, but only in answer to that call, and never with animations
+ *     removed (`docs/FEATURES.md` §7.2.1).
  *  2. **There is no way to fail.** A full row simply goes. When the stack reaches into the top
  *     [CLEAR_ROWS] rows, rows are taken from the bottom until it no longer does, so the next shape
  *     always fits and the stack just stops rising. There is no "game over" state to reach, and
@@ -67,6 +67,15 @@ data class CalmBlocks(
         var p = piece
         while (fits(p.copy(y = p.y + 1))) p = p.copy(y = p.y + 1)
         return p
+    }
+
+    /**
+     * The rows the shape in hand would fill if let fall now, top first. The screen fades exactly
+     * these before [drop] takes them, so what fades is what goes.
+     */
+    fun fullRowsOnLanding(): List<Int> {
+        val landed = landing().absolute.toSet()
+        return (0 until HEIGHT).filter { y -> (0 until WIDTH).all { x -> at(x, y) != EMPTY || Cell(x, y) in landed } }
     }
 
     /**

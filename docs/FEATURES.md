@@ -340,9 +340,12 @@ never setting, how often the support space is offered: #172.
 #### 7.2.1 Calm activities
 
 Three things for the hands, each its own option in the menu (#170): **Falling blocks** (turn and
-place small shapes; a full row goes), **Sand to rake** (a finger leaves grooves; "Smooth" wipes
-them) and **Tidy a little shelf** (drag books onto two shelves in any order, or tap one to stand it
-at the end of a shelf; a firm shake of the phone, or the Shake button, tumbles them loose). Distraction has good short-term evidence for a hard moment and none as a long-term
+place small shapes, by sliding, tapping and swiping on the board or with buttons; a full row goes),
+**Sand to rake** (the rake leaves four grooves and smooths the sand under it, a finger leaves one;
+"Smooth" wipes them) and **Tidy a little shelf** (drag a book anywhere on two shelves, in any order,
+and the books beside it scoot along just far enough to make room, already while it is held; or tap
+one to stand it at the end of a shelf; a firm shake of the phone, or the Shake button, tumbles them
+loose). Distraction has good short-term evidence for a hard moment and none as a long-term
 treatment, and some people find a game a strain rather than a rest, so both are offered, never the
 default, and easy to turn off. The rules they keep, beyond §7.2's:
 
@@ -352,8 +355,10 @@ default, and easy to turn off. The rules they keep, beyond §7.2's:
   and Smooth start over. The shelf has no right order and nothing marks it done, even with every
   book up (`app/src/main/java/com/daymark/app/calm/CalmShelf.kt`).
 - **Nothing moves on its own.** A shape stays at the top until the person moves it, and falls when
-  they say so; a groove stays until they smooth it. Neither screen animates, so there is nothing
-  for reduced motion to change. Books never fall by themselves.
+  they say so; a groove stays until they smooth it. Books never fall by themselves. The only motion
+  answers a touch and runs once: a shape slides down as it falls, a full row fades before it goes,
+  and "Smooth" draws a board down the sand. With animations removed in the system settings, each
+  happens at once.
 - **A shake has to be meant.** The shelf listens to the accelerometer only while it is on screen,
   and tumbles only on three sharp peaks above 2.5 g within a second, then waits a second and a half
   before it can tumble again. One jolt, from a pocket, a bag or a phone set down hard, does

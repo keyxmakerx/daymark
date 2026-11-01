@@ -356,9 +356,11 @@ move a little, breathe, untangle a thought, write it out, do one small thing, th
 your safety plan (once you've written one), and crisis resources.
 
 The three calm activities are something for your hands. **Falling blocks**: turn and place small
-shapes, and a full row goes. **Sand to rake**: draw a finger across the sand, and **Smooth** wipes it
-flat. **Tidy a little shelf**: put the books on the shelves in any order (drag one, or tap it), and
-give the phone a firm shake, or tap **Shake**, to tumble them loose. Nothing is counted and there is
+shapes, and a full row goes; slide a finger on the board to move a shape, tap to turn it and swipe
+down to let it fall, or use the buttons. **Sand to rake**: draw across the sand with the **Rake** or a
+**Finger**, and **Smooth** draws a board across it to wipe it flat. **Tidy a little shelf**: put the
+books anywhere on the shelves, in any order (drag one, or tap it), and the others shuffle along to
+make room; give the phone a firm shake, or tap **Shake**, to tumble them loose. Nothing is counted and there is
 nothing to win or lose; the shapes and books only move when you move them. **Back to the menu** is always at the top. If they aren't for you, turn off **More → Gentle
 support → Show calm activities** and they're gone from the menu.
 

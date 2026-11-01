@@ -8,8 +8,10 @@ All notable changes to this project are documented here. The format is based on
 
 ### Added
 - **Three calm activities in Take a moment.** **Falling blocks** (turn and place small shapes; a
-  full row goes), **Sand to rake** (draw in the sand, then smooth it) and **Tidy a little shelf**
-  (put books on a shelf in any order; a firm shake, or the Shake button, tumbles them loose). Nothing is counted, there is
+  full row goes; slide, tap and swipe on the board, or use the buttons), **Sand to rake** (draw in
+  shaded sand with a rake or a finger, then smooth it) and **Tidy a little shelf** (put books
+  anywhere on a shelf, and the others make room; a firm shake, or the Shake button, tumbles them
+  loose). Nothing is counted, there is
   nothing to win or lose, and nothing moves unless you move it. **Back to the menu** is always at
   the top, and **More → Gentle support → Show calm activities** takes them out of the menu. A jolt in a pocket doesn't count as a shake.
 - **"Not right now" is first in Take a moment, and the options stay still.** The crisis resource is

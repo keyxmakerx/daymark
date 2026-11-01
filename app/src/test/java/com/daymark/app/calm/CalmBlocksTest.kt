@@ -38,6 +38,23 @@ class CalmBlocksTest {
     }
 
     @Test
+    fun `the rows that fade are exactly the rows that go`() {
+        // The bottom row lacks only its last square; the row above lacks two, so only one is filled.
+        val cells = MutableList(WIDTH * HEIGHT) { EMPTY }
+        for (x in 0 until WIDTH - 1) cells[(HEIGHT - 1) * WIDTH + x] = 0
+        for (x in 0 until WIDTH - 2) cells[(HEIGHT - 2) * WIDTH + x] = 0
+        val single = CalmBlocks.Piece(listOf(CalmBlocks.Cell(0, 0)), WIDTH - 1, 0, 2)
+        val board = CalmBlocks(cells, single, 1, 1)
+        assertEquals(listOf(HEIGHT - 1), board.fullRowsOnLanding())
+        // And drop really takes that row and no other: the row above comes down intact.
+        val after = board.drop()
+        assertEquals(WIDTH - 2, (0 until WIDTH).count { after.at(it, HEIGHT - 1) != EMPTY })
+        // Positive control: a shape that fills nothing names no row.
+        val elsewhere = CalmBlocks(cells, single.copy(x = 0), 1, 1)
+        assertEquals(emptyList<Int>(), elsewhere.fullRowsOnLanding())
+    }
+
+    @Test
     fun `a full row simply goes`() {
         // Seven of eight squares in the bottom row are settled; a shape that fills the gap clears it.
         val cells = MutableList(WIDTH * HEIGHT) { EMPTY }

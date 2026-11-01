@@ -1669,9 +1669,9 @@ private fun SkyList(
 /**
  * The Android equivalent of `prefers-reduced-motion`.
  *
- * This is the app's only reduced-motion check (`docs/SKY.md` §7.4), deliberately local to the one
- * surface that needs it rather than installed as an app-wide utility this change has no mandate to
- * introduce.
+ * The sky's reduced-motion check (`docs/SKY.md` §7.4), deliberately local to the surface that needs
+ * it rather than installed as an app-wide utility. The calm activities read the same setting through
+ * their own `prefersStillness`.
  *
  * `ANIMATOR_DURATION_SCALE` at zero is what the platform's own "Remove animations" setting sets,
  * and it is the signal Android's accessibility guidance points at. It is coarse — someone may have
