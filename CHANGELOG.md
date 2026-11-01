@@ -138,6 +138,9 @@ All notable changes to this project are documented here. The format is based on
   "Signed in as" (#496).
 - **A practice role's duties that have no screen yet say "Not built"** where the role is chosen,
   so a front desk is no longer offered a calendar that does not exist.
+- **The Key tells time one way, by colour.** Its line for your sky's shape no longer says the
+  oldest memories are at the top. It says the shape is chance, and a river sky's line no longer
+  promises a river you cannot see: its stars wind down the sky like one.
 - **A restore that fails part-way keeps your photos and reminders.** "Replace all" used to empty
   the photo folder and switch reminders off before it knew the restore would work. The file's
   photos now wait in a staging folder until the restore has succeeded, and reminders and tracker

@@ -9,6 +9,9 @@ package com.daymark.app.sky
  * things to collect. No entry says how a shape is earned or kept; a band is a description of a
  * stretch of dates, never a reward for it.
  *
+ * Colour is its one time key. The sky's form is chance, drawn from its seed and decided by nothing
+ * the person did, so a form's line says only that, and never where old or new stars sit.
+ *
  * Fixed, human-written lines only. Import-free, like the rest of `sky/`.
  */
 object SkyKey {
@@ -53,22 +56,22 @@ object SkyKey {
             SkyForm.Form.RIVER -> out.add(
                 Entry(
                     "River",
-                    "Your memories run along a river, oldest at the top. Every sky takes a shape " +
-                        "of its own, and yours is a river.",
+                    "Your stars wind down the sky in one long, natural course, like a river. The " +
+                        "shape is chance: every sky takes one of its own, and yours is a river.",
                 ),
             )
             SkyForm.Form.GALAXIES -> out.add(
                 Entry(
                     "Galaxies",
-                    "Your memories fill one galaxy, then the next, oldest at the top. Every sky " +
-                        "takes a shape of its own, and yours is galaxies.",
+                    "Your stars gather into galaxies, each its own size. The shape is chance: " +
+                        "every sky takes one of its own, and yours is galaxies.",
                 ),
             )
             SkyForm.Form.OPEN -> out.add(
                 Entry(
                     "Open sky",
-                    "Your memories spread across an open sky, oldest at the top. Every sky takes " +
-                        "a shape of its own, and yours has no line to follow.",
+                    "Your stars spread across an open sky with no line to follow. The shape is " +
+                        "chance: every sky takes one of its own, and yours is open.",
                 ),
             )
             null -> Unit
