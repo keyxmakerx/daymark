@@ -7,10 +7,11 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Added
-- **Two calm activities in Take a moment.** **Falling blocks** (turn and place small shapes; a full
-  row goes) and **Sand to rake** (draw in the sand, then smooth it). Nothing is counted, there is
+- **Three calm activities in Take a moment.** **Falling blocks** (turn and place small shapes; a
+  full row goes), **Sand to rake** (draw in the sand, then smooth it) and **Tidy a little shelf**
+  (put books on a shelf in any order; a firm shake, or the Shake button, tumbles them loose). Nothing is counted, there is
   nothing to win or lose, and nothing moves unless you move it. **Back to the menu** is always at
-  the top, and **More → Gentle support → Show calm activities** takes them out of the menu.
+  the top, and **More → Gentle support → Show calm activities** takes them out of the menu. A jolt in a pocket doesn't count as a shake.
 - **"Not right now" is first in Take a moment, and the options stay still.** The crisis resource is
   last, and the cards no longer drift.
 - **An invitation can be shown as a code.** After you create an invite link for a clinician, **Show

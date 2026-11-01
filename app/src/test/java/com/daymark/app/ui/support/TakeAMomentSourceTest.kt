@@ -30,7 +30,7 @@ class TakeAMomentSourceTest {
     private companion object {
         const val DIR = "app/src/main/java/com/daymark/app/ui/support"
         const val MENU = "$DIR/SupportScreen.kt"
-        val CALM = listOf("$DIR/CalmActivityFrame.kt", "$DIR/CalmBlocksScreen.kt", "$DIR/SandRakeScreen.kt")
+        val CALM = listOf("$DIR/CalmActivityFrame.kt", "$DIR/CalmBlocksScreen.kt", "$DIR/SandRakeScreen.kt", "$DIR/CalmShelfScreen.kt")
 
         val ENDLESS = listOf("rememberInfiniteTransition", "infiniteRepeatable")
 
@@ -104,10 +104,11 @@ class TakeAMomentSourceTest {
         val gate = code.indexOf("if (viewModel.showCalmActivities) {")
         assertTrue(gate >= 0)
         val gated = code.substring(gate, code.indexOf('}', gate))
-        assertTrue(gated.contains("\"Falling blocks\"") && gated.contains("\"Sand to rake\""))
+        assertTrue(listOf("Falling blocks", "Sand to rake", "Tidy a little shelf").all { gated.contains("\"$it\"") })
         // Nowhere else in the menu.
         assertEquals(1, code.split("\"Falling blocks\"").size - 1)
         assertEquals(1, code.split("\"Sand to rake\"").size - 1)
+        assertEquals(1, code.split("\"Tidy a little shelf\"").size - 1)
     }
 
     @Test
@@ -118,14 +119,14 @@ class TakeAMomentSourceTest {
         assertNotNull(firstPhraseIn(stringLiteralsIn(plantAfter(blocks, anchor, "Text(\"Rows: 3\")\nText(\"Best so far\")\n")), SCORING))
         assertNotNull(firstPhraseIn(stringLiteralsIn(plantAfter(blocks, anchor, "Text(\"Feel better?\")\n")), FEELING))
         // The frame's own words are the fixed lines in `calm/SandRake.kt`'s CalmSession.
-        val worded = listOf(CALM[1], CALM[2], "app/src/main/java/com/daymark/app/calm/SandRake.kt")
+        val worded = listOf(CALM[1], CALM[2], CALM[3], "app/src/main/java/com/daymark/app/calm/SandRake.kt")
         worded.forEach { path ->
             val strings = stringLiteralsIn(withoutComments(read(path)))
             assertTrue("$path has words to read", strings.isNotEmpty())
             assertNull(path, firstPhraseIn(strings, SCORING))
             assertNull(path, firstPhraseIn(strings, FEELING))
         }
-        val menuRows = listOf("Turn and place slow shapes. Nothing is counted.", "Draw lines in the sand, then smooth it flat.")
+        val menuRows = listOf("Turn and place slow shapes. Nothing is counted.", "Draw lines in the sand, then smooth it flat.", "Put books on a shelf in any order. Shake to tumble them.")
         assertNull(firstPhraseIn(menuRows, SCORING))
         assertNull(firstPhraseIn(menuRows, FEELING))
     }
@@ -146,6 +147,6 @@ class TakeAMomentSourceTest {
         val content = code.indexOf("content()")
         assertTrue(back in 0 until content)
         // Both activities sit inside the frame.
-        listOf(CALM[1], CALM[2]).forEach { assertTrue(it, withoutComments(read(it)).contains("CalmActivityFrame(")) }
+        listOf(CALM[1], CALM[2], CALM[3]).forEach { assertTrue(it, withoutComments(read(it)).contains("CalmActivityFrame(")) }
     }
 }

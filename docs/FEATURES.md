@@ -293,7 +293,7 @@ All under More. None of them is treatment.
 
 A calm screen for a hard moment. It opens with an acknowledgement, then offers a menu, in this
 order: "Not right now"; move a little, breathe, untangle a thought and write it out; do one small
-thing; the two calm activities (§7.2.1), unless they are switched off; the person's safety plan
+thing; the three calm activities (§7.2.1), unless they are switched off; the person's safety plan
 (only once one has something in it, §8); and crisis resources, last. The menu is the same for
 everyone. "Do one small thing" offers three steps from the Do one thing list (a shower, a warm
 drink, stepping outside), and "Move a little" offers a short stretch; neither ever names one of the
@@ -339,30 +339,37 @@ never setting, how often the support space is offered: #172.
 
 #### 7.2.1 Calm activities
 
-Two things for the hands, each its own option in the menu (#170): **Falling blocks** (turn and
-place small shapes; a full row goes) and **Sand to rake** (a finger leaves grooves; "Smooth" wipes
-them). Distraction has good short-term evidence for a hard moment and none as a long-term
+Three things for the hands, each its own option in the menu (#170): **Falling blocks** (turn and
+place small shapes; a full row goes), **Sand to rake** (a finger leaves grooves; "Smooth" wipes
+them) and **Tidy a little shelf** (drag books onto two shelves in any order, or tap one to stand it
+at the end of a shelf; a firm shake of the phone, or the Shake button, tumbles them loose). Distraction has good short-term evidence for a hard moment and none as a long-term
 treatment, and some people find a game a strain rather than a rest, so both are offered, never the
 default, and easy to turn off. The rules they keep, beyond §7.2's:
 
 - **Nothing to win or lose.** Nothing is counted: no score, no tally of rows, no timer, no progress,
   no "game over". When the falling-blocks stack reaches the top band, rows are taken from the
   bottom, so it just stops rising (`app/src/main/java/com/daymark/app/calm/CalmBlocks.kt`). Clear
-  and Smooth start over.
+  and Smooth start over. The shelf has no right order and nothing marks it done, even with every
+  book up (`app/src/main/java/com/daymark/app/calm/CalmShelf.kt`).
 - **Nothing moves on its own.** A shape stays at the top until the person moves it, and falls when
   they say so; a groove stays until they smooth it. Neither screen animates, so there is nothing
-  for reduced motion to change.
+  for reduced motion to change. Books never fall by themselves.
+- **A shake has to be meant.** The shelf listens to the accelerometer only while it is on screen,
+  and tumbles only on three sharp peaks above 2.5 g within a second, then waits a second and a half
+  before it can tumble again. One jolt, from a pocket, a bag or a phone set down hard, does
+  nothing. The numbers are a judgement not yet tried on a phone, which is why the Shake button is
+  always there too.
 - **Always a way out.** "Back to the menu" is the first thing on each screen, and the back gesture
   does the same.
 - **A natural end.** About ten minutes in, one fixed line appears: "You can keep going, or go back
   to the menu." It never says how the person feels.
 - **Nothing recorded.** A visit is not logged anywhere and the sand is not saved.
 - **Off in one tap.** **More → Gentle support → Show calm activities** is on by default and, turned
-  off, removes both from the menu. It works whether or not Gentle support itself is on, because the
+  off, removes all three from the menu. It works whether or not Gentle support itself is on, because the
   menu can be reached either way.
 
 `TakeAMomentSourceTest` holds the menu's order, its stillness and the activities' words;
-`CalmBlocksTest` and `SandRakeTest` hold the rules above (`tools/jvm-tests.sh calm`).
+`CalmBlocksTest`, `SandRakeTest`, `CalmShelfTest` and `ShakeDetectorTest` hold the rules above (`tools/jvm-tests.sh calm`).
 
 ### 7.3 Crisis resources and the crisis floor
 

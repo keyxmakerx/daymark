@@ -126,7 +126,8 @@ fun GentleSupportScreen(
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                         Text("Show calm activities", style = MaterialTheme.typography.bodyLarge)
                         Text(
-                            "Falling blocks and sand to rake, in Take a moment. Off takes them out of the menu.",
+                            "Falling blocks, sand to rake and the little shelf, in Take a moment. Off takes them " +
+                                "out of the menu.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )

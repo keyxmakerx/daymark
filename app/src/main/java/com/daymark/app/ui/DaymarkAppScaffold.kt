@@ -504,6 +504,7 @@ fun DaymarkAppScaffold(
                     onCrisis = { navController.navigate(Routes.CRISIS) },
                     onBlocks = { navController.navigate(Routes.SUPPORT_BLOCKS) },
                     onSand = { navController.navigate(Routes.SUPPORT_SAND) },
+                    onShelf = { navController.navigate(Routes.SUPPORT_SHELF) },
                 )
             }
             composable(Routes.SUPPORT_BREATHE, enterTransition = sheetEnter, popExitTransition = sheetPopExit) {
@@ -515,6 +516,9 @@ fun DaymarkAppScaffold(
             }
             composable(Routes.SUPPORT_SAND, enterTransition = sheetEnter, popExitTransition = sheetPopExit) {
                 com.daymark.app.ui.support.SandRakeScreen(onBackToMenu = { navController.popBackStack() })
+            }
+            composable(Routes.SUPPORT_SHELF, enterTransition = sheetEnter, popExitTransition = sheetPopExit) {
+                com.daymark.app.ui.support.CalmShelfScreen(onBackToMenu = { navController.popBackStack() })
             }
             composable(Routes.CRISIS, enterTransition = zEnter, popExitTransition = zPopExit) {
                 CrisisResourcesScreen(onBack = { navController.popBackStack() })
