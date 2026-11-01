@@ -49,6 +49,8 @@ object Routes {
     const val GENTLE_SUPPORT = "gentle_support"
     const val SUPPORT = "support"
     const val SUPPORT_BREATHE = "support_breathe"
+    const val SUPPORT_BLOCKS = "support_blocks"
+    const val SUPPORT_SAND = "support_sand"
     const val CRISIS = "crisis"
 
     /**

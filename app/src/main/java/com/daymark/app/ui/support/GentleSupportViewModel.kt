@@ -20,6 +20,14 @@ class GentleSupportViewModel @Inject constructor(
     private val _frequency = MutableStateFlow(settings.supportOfferFrequency)
     val frequency: StateFlow<SupportOfferFrequency> = _frequency.asStateFlow()
 
+    private val _calmActivities = MutableStateFlow(settings.calmActivitiesEnabled)
+    val calmActivities: StateFlow<Boolean> = _calmActivities.asStateFlow()
+
+    fun setCalmActivities(value: Boolean) {
+        settings.calmActivitiesEnabled = value
+        _calmActivities.value = value
+    }
+
     fun setEnabled(value: Boolean) {
         settings.gentleSupportEnabled = value
         _enabled.value = value

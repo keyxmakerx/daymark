@@ -502,10 +502,19 @@ fun DaymarkAppScaffold(
                     onReframe = { navController.navigate(Routes.thoughtRecord()) },
                     onMove = { navController.navigate(Routes.MOVEMENT) },
                     onCrisis = { navController.navigate(Routes.CRISIS) },
+                    onBlocks = { navController.navigate(Routes.SUPPORT_BLOCKS) },
+                    onSand = { navController.navigate(Routes.SUPPORT_SAND) },
                 )
             }
             composable(Routes.SUPPORT_BREATHE, enterTransition = sheetEnter, popExitTransition = sheetPopExit) {
                 BreathingPacerScreen(onDone = { navController.popBackStack() })
+            }
+            // The calm activities return to the menu they were chosen from, never past it (#170).
+            composable(Routes.SUPPORT_BLOCKS, enterTransition = sheetEnter, popExitTransition = sheetPopExit) {
+                com.daymark.app.ui.support.CalmBlocksScreen(onBackToMenu = { navController.popBackStack() })
+            }
+            composable(Routes.SUPPORT_SAND, enterTransition = sheetEnter, popExitTransition = sheetPopExit) {
+                com.daymark.app.ui.support.SandRakeScreen(onBackToMenu = { navController.popBackStack() })
             }
             composable(Routes.CRISIS, enterTransition = zEnter, popExitTransition = zPopExit) {
                 CrisisResourcesScreen(onBack = { navController.popBackStack() })

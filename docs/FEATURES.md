@@ -291,10 +291,11 @@ All under More. None of them is treatment.
 
 ### 7.2 "Take a moment"
 
-A calm screen for a hard moment. It opens with an acknowledgement, then offers a menu: move a
-little, breathe, untangle a thought, write it out, do one small thing, the person's safety plan
-(only once one has something in it, §8), crisis resources, and "Not right now". The menu is the same
-for everyone. "Do one small thing" offers three steps from the Do one thing list (a shower, a warm
+A calm screen for a hard moment. It opens with an acknowledgement, then offers a menu, in this
+order: "Not right now"; move a little, breathe, untangle a thought and write it out; do one small
+thing; the two calm activities (§7.2.1), unless they are switched off; the person's safety plan
+(only once one has something in it, §8); and crisis resources, last. The menu is the same for
+everyone. "Do one small thing" offers three steps from the Do one thing list (a shower, a warm
 drink, stepping outside), and "Move a little" offers a short stretch; neither ever names one of the
 person's own activities (#483).
 
@@ -328,14 +329,40 @@ The rules it keeps, condensed from the design research:
 
 Never offered: generic affirmations, cold-water immersion, or a comparison with the person's
 earlier, better days. Every default is the same for everyone. Daymark never asks what someone uses
-it for, or records a condition, to set one (#166). The screen and rules 1–3 disagree today: "Not
-right now" comes last, the options drift on endless animations with no reduced-motion check, and
-the opening line puts a feeling into words. Not built: #352 (the order and the motion), #353 (the
-opening lines).
+it for, or records a condition, to set one (#166). The options stay still: the one fade
+as the screen opens is all the motion there is (#352). The opening line still puts a feeling into
+words. Not built: #353 (the opening lines).
 
 Not built: more techniques (progressive muscle relaxation, cognitive defusion, brief mindfulness, a
-self-compassion break, naming the feeling, 5-4-3-2-1 grounding, a calm game): #170. A clinician
-recommending, never setting, how often the support space is offered: #172.
+self-compassion break, naming the feeling, 5-4-3-2-1 grounding): #170. A clinician recommending,
+never setting, how often the support space is offered: #172.
+
+#### 7.2.1 Calm activities
+
+Two things for the hands, each its own option in the menu (#170): **Falling blocks** (turn and
+place small shapes; a full row goes) and **Sand to rake** (a finger leaves grooves; "Smooth" wipes
+them). Distraction has good short-term evidence for a hard moment and none as a long-term
+treatment, and some people find a game a strain rather than a rest, so both are offered, never the
+default, and easy to turn off. The rules they keep, beyond §7.2's:
+
+- **Nothing to win or lose.** Nothing is counted: no score, no tally of rows, no timer, no progress,
+  no "game over". When the falling-blocks stack reaches the top band, rows are taken from the
+  bottom, so it just stops rising (`app/src/main/java/com/daymark/app/calm/CalmBlocks.kt`). Clear
+  and Smooth start over.
+- **Nothing moves on its own.** A shape stays at the top until the person moves it, and falls when
+  they say so; a groove stays until they smooth it. Neither screen animates, so there is nothing
+  for reduced motion to change.
+- **Always a way out.** "Back to the menu" is the first thing on each screen, and the back gesture
+  does the same.
+- **A natural end.** About ten minutes in, one fixed line appears: "You can keep going, or go back
+  to the menu." It never says how the person feels.
+- **Nothing recorded.** A visit is not logged anywhere and the sand is not saved.
+- **Off in one tap.** **More → Gentle support → Show calm activities** is on by default and, turned
+  off, removes both from the menu. It works whether or not Gentle support itself is on, because the
+  menu can be reached either way.
+
+`TakeAMomentSourceTest` holds the menu's order, its stillness and the activities' words;
+`CalmBlocksTest` and `SandRakeTest` hold the rules above (`tools/jvm-tests.sh calm`).
 
 ### 7.3 Crisis resources and the crisis floor
 

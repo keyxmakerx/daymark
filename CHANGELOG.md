@@ -13,6 +13,12 @@ All notable changes to this project are documented here. The format is based on
   server cannot read them, and they stay with you if the client stops sharing. You can download a
   plain copy for your records. Leaving a relationship now warns that your notes cannot be opened
   afterwards.
+- **Two calm activities in Take a moment.** **Falling blocks** (turn and place small shapes; a full
+  row goes) and **Sand to rake** (draw in the sand, then smooth it). Nothing is counted, there is
+  nothing to win or lose, and nothing moves unless you move it. **Back to the menu** is always at
+  the top, and **More → Gentle support → Show calm activities** takes them out of the menu.
+- **"Not right now" is first in Take a moment, and the options stay still.** The crisis resource is
+  last, and the cards no longer drift.
 - **An invitation can be shown as a code.** After you create an invite link for a clinician, **Show
   as a code** draws it as a QR code, so a clinician in the room can open it with their phone's
   camera instead of being sent the link. The screen says that anyone who can see it can open it,
