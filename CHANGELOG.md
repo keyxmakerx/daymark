@@ -81,6 +81,12 @@ All notable changes to this project are documented here. The format is based on
 - **Start evening check-ins in your sky**, off unless you turn it on: the evening reminder opens on
   the night sky and your new star lands there. The notification looks exactly as before (#540).
 - **A tracker in your sky opens its check-in settings** from its card (#539).
+- **The PDF report can have a cover and a back page.** Both are off until you switch them on in the
+  export dialog. The cover says what the report is, its dates and when it was made; the back page is
+  lined, for notes by hand. Neither shows any of your scores or entries, so a printed report shows
+  nothing of yours on the outside. Switch on **Printing on both sides** and blank pages are added so
+  the cover and the back page each sit on a sheet of their own and the report opens on a right-hand
+  page.
 - **You can call your crisis line from the app.** Once you've said the line is right for you, the
   crisis screen has a **Call** button, and **Text** where the line takes texts. Each opens your
   phone's own dialer or messages app with the number filled in; Daymark never places a call. The

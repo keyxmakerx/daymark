@@ -95,6 +95,24 @@ data class PdfExportOptions(
      * reach back the whole six months.
      */
     val includeGapComparison: Boolean = true,
+    /**
+     * A cover page before side 1. It carries what the document is, the range and the date, and no
+     * score or entry, so a report lying face-up in a printer tray or a folder shows nothing of the
+     * person's data. Default off: the one-tap report is the four sides alone.
+     */
+    val includeCover: Boolean = false,
+    /**
+     * A back page after the last side: ruled room for notes by hand, and again no score or entry, so
+     * a report lying face-down shows nothing either. Default off.
+     */
+    val includeBackPage: Boolean = false,
+    /**
+     * The person will print on both sides of the paper. Then the cover and the back page each get a
+     * sheet of their own, padded with blank pages, and side 1 opens on a right-hand page
+     * ([ReportLayout.blanksAfterCover], [ReportLayout.blanksBeforeBack]). It changes nothing
+     * without a cover or a back page: the sides themselves already start on page 1.
+     */
+    val twoSided: Boolean = false,
     val paperSize: PaperSize = PaperSize.A4,
     val patientName: String = "",
 )

@@ -98,6 +98,13 @@ class PdfReportGenerator @Inject constructor() {
         val ctx = PageCtx(doc, w.toFloat(), h.toFloat(), data, totalPages)
         ctx.start()
 
+        // The cover, then its blank reverse when printed on both sides, so side 1 opens on a
+        // right-hand page (ReportLayout.blanksAfterCover).
+        if (options.includeCover) {
+            ctx.cover(data)
+            repeat(ReportLayout.blanksAfterCover(options.twoSided)) { ctx.blank() }
+        }
+
         // Side 3 exists only if the person switched it on *and* something survived their choice —
         // ticked entries, or the blanket "everything in this range". Both gates are theirs; an
         // entry merely being in range is not inclusion, and a document of three sides is the
@@ -110,7 +117,14 @@ class PdfReportGenerator @Inject constructor() {
         if (journalSide) ctx.sideThreeInTheirWords(data, sides)
         ctx.sideFourForTheConversation(data, options, sides)
 
-        ctx.finish()
+        if (options.includeBackPage) {
+            // endPage opens the next page, so the sides took every page before it.
+            ctx.endPage()
+            repeat(ReportLayout.blanksBeforeBack(ctx.pageCount - 1, options.twoSided)) { ctx.blank() }
+            ctx.backPage()
+        } else {
+            ctx.finish()
+        }
         return Pass(doc, ctx.pageCount)
     }
 }
@@ -309,6 +323,23 @@ internal object Copy {
         "Not in this report, and not obtainable from it. Location — the app collects none. Anything " +
             "written inside an exercise — those fields are excluded from sharing by construction, " +
             "not by preference. Any journal entry not on side 3."
+
+    /**
+     * The cover's one line under its title block. The cover exists so that the first page anyone
+     * sees carries no data, and it says so.
+     */
+    const val COVER_NOTE =
+        "Self-reported data, not a clinical assessment. This cover carries no scores and no " +
+            "entries; those are inside."
+
+    /** The back page's heading, over ruled lines left for writing on by hand. */
+    const val BACK_TITLE = "Notes"
+
+    /** The back page's one line of fixed copy, where a footer would be. */
+    const val BACK_NOTE = "Room for notes by hand. This page carries no scores and no entries."
+
+    /** Printed on a page that is blank so the cover or back page has a sheet of its own. */
+    const val BLANK_PAGE = "This page is left blank for printing on both sides."
 
     /** The authenticity wording. Unchanged from the previous report; only its position moved. */
     const val AUTHENTICITY =
@@ -559,6 +590,77 @@ private class PageCtx(
     fun finish() {
         drawFooter()
         doc.finishPage(page)
+    }
+
+    /**
+     * Closes the last page of the sides, with its footer, and opens the next one. Cleared of its
+     * side first: the page it opens is a bookend or a blank and is no side's continuation.
+     */
+    fun endPage() {
+        side = null
+        newPage()
+    }
+
+    // ---- bookends: the cover, the back page, and the blanks between ----
+
+    /**
+     * The cover, drawn on the page [start] opened. It carries no score and no entry, and no footer:
+     * the footer's hash prefix belongs to the pages it describes. It is still a physical page, so
+     * the footers that follow count it.
+     */
+    fun cover(data: ReportData) {
+        y = ReportLayout.coverTitleTop(pageH)
+        canvas.drawText(
+            "DAYMARK",
+            margin, y + ReportLayout.HEADER_EYEBROW_BASELINE,
+            paint(7.5f, SOFT, bold = true).apply { letterSpacing = 0.1f },
+        )
+        y += ReportLayout.HEADER_EYEBROW_ADVANCE
+        canvas.drawText("Between-session summary", margin, y + 22f, paint(26f, INK, bold = true))
+        y += 40f
+        val lines = listOfNotNull(
+            data.patientName.takeIf { it.isNotBlank() },
+            data.rangeLabel,
+            "Prepared ${DateUtils.formatDate(data.generatedAtMillis)}",
+        )
+        val lp = paint(11f, SOFT)
+        lines.forEach { ln ->
+            canvas.drawText(ln, margin, y + 11f, lp)
+            y += 17f
+        }
+        bookendNote(Copy.COVER_NOTE)
+        doc.finishPage(page)
+        start()
+    }
+
+    /**
+     * A page left blank so a cover or back page has a sheet of its own. It says why, and carries
+     * the footer, so it reads as part of the document rather than a printer fault.
+     */
+    fun blank() {
+        val p = paint(8f, SOFT)
+        val text = Copy.BLANK_PAGE
+        canvas.drawText(text, (pageW - p.measureText(text)) / 2f, pageH / 2f, p)
+        newPage()
+    }
+
+    /**
+     * The back page, drawn on the page already open, and the document's last. Ruled room for notes
+     * by hand; no score, no entry and no footer, for the same reason as the cover.
+     */
+    fun backPage() {
+        canvas.drawText(Copy.BACK_TITLE, margin, y + ReportLayout.HEADER_TITLE_BASELINE, paint(17f, INK, bold = true))
+        y += ReportLayout.HEADER_TITLE_ADVANCE
+        ReportLayout.notesRules(y, pageH).forEach { ry ->
+            canvas.drawLine(margin, ry, pageW - margin, ry, hairline)
+        }
+        bookendNote(Copy.BACK_NOTE)
+        doc.finishPage(page)
+    }
+
+    /** A bookend's one line of fixed copy, set where a footer would be. */
+    private fun bookendNote(text: String) {
+        canvas.drawText(text, margin, pageH - ReportLayout.FOOTER_TEXT_RISE, paint(7.5f, SOFT))
     }
 
     private fun newPage() {

@@ -293,6 +293,13 @@ the insight D6 does not build, and the person reads the report too. It cites not
 nothing. Where evidence is citable, it is
 psychoeducation for the person, in the app.
 
+**The outside of a printed report carries no data.** A cover before side 1 and a back page after
+side 4 are each the person's choice and off by default. Neither holds a score or an entry: the
+cover says what the document is, the range and the date, and the back page is room for notes by
+hand. They are not sides, so the side count does not change. Printed on both sides, each gets a
+sheet of its own, padded with blank pages that say why they are blank, and side 1 opens on a
+right-hand page.
+
 **As built:** `export/PdfReportGenerator.kt`, `export/ReportLayout.kt`, `stats/DiscussionPrompts.kt`.
 Seeing the report before export: `ui/export/ReportExportScreen.kt` (#198).
 Source: [the August plan §1](https://github.com/keyxmakerx/daymark/blob/968638594f10f6a4424415f8a5c14fd8eb4aaa00/docs/PLAN_2026-08-NEXT.md?plain=1#L9-L58).

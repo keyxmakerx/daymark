@@ -592,6 +592,9 @@ fun DaymarkAppScaffold(
                     navArgument("notes") { type = NavType.BoolType; defaultValue = false },
                     navArgument("charts") { type = NavType.BoolType; defaultValue = true },
                     navArgument("activities") { type = NavType.BoolType; defaultValue = false },
+                    navArgument("cover") { type = NavType.BoolType; defaultValue = false },
+                    navArgument("back") { type = NavType.BoolType; defaultValue = false },
+                    navArgument("twoSided") { type = NavType.BoolType; defaultValue = false },
                     navArgument("pick") { type = NavType.BoolType; defaultValue = false },
                 ),
                 enterTransition = zEnter,
@@ -608,6 +611,9 @@ fun DaymarkAppScaffold(
                         includeNotes = args?.getBoolean("notes") ?: false,
                         includeCharts = args?.getBoolean("charts") ?: true,
                         includeActivityTable = args?.getBoolean("activities") ?: false,
+                        includeCover = args?.getBoolean("cover") ?: false,
+                        includeBackPage = args?.getBoolean("back") ?: false,
+                        twoSided = args?.getBoolean("twoSided") ?: false,
                     )
                 }
                 ReportExportScreen(

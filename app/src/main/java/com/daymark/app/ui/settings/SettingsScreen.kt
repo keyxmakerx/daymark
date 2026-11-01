@@ -471,6 +471,11 @@ private fun PdfOptionsDialog(
     // Off until switched on: the journal is the person's own writing. On, it opens the picker next,
     // where nothing is ticked to begin with (ui/export/JournalPickerScreen.kt, #303).
     var journal by remember { mutableStateOf(false) }
+    // A cover and a back page carry no data, so the outside of a printed report shows none. Both
+    // sides of the paper only matters once one of them is on, so it is offered only then.
+    var cover by remember { mutableStateOf(false) }
+    var back by remember { mutableStateOf(false) }
+    var twoSided by remember { mutableStateOf(false) }
     val ranges = listOf(30 to "Last 30 days", 90 to "Last 90 days", 365 to "Last 12 months", 0 to "All time")
 
     // What a report is comes first, before any choice about what goes in it (#336). The words are
@@ -502,6 +507,9 @@ private fun PdfOptionsDialog(
                 ToggleRow("Include charts", charts) { charts = it }
                 ToggleRow("Include mood beside each activity", activities) { activities = it }
                 ToggleRow("Choose journal entries to include", journal) { journal = it }
+                ToggleRow("Add a cover page", cover) { cover = it }
+                ToggleRow("Add a back page for notes", back) { back = it }
+                if (cover || back) ToggleRow("Printing on both sides", twoSided) { twoSided = it }
             }
         },
         confirmButton = {
@@ -517,6 +525,9 @@ private fun PdfOptionsDialog(
                         includeNotes = notes,
                         includeCharts = charts,
                         includeActivityTable = activities,
+                        includeCover = cover,
+                        includeBackPage = back,
+                        twoSided = twoSided && (cover || back),
                     ),
                     journal,
                 )
