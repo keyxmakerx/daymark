@@ -42,6 +42,7 @@ fun GentleSupportScreen(
 ) {
     val enabled by viewModel.enabled.collectAsStateWithLifecycle()
     val frequency by viewModel.frequency.collectAsStateWithLifecycle()
+    val calmActivities by viewModel.calmActivities.collectAsStateWithLifecycle()
 
     Scaffold(
         topBar = {
@@ -112,6 +113,25 @@ fun GentleSupportScreen(
                             }
                         }
                     }
+                }
+            }
+            // Outside the `enabled` block: Take a moment can be reached with Gentle support off, from
+            // the suggestion after a low entry, so this switch has to be reachable either way (#170).
+            PaperSurface(modifier = Modifier.fillMaxWidth()) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                        Text("Show calm activities", style = MaterialTheme.typography.bodyLarge)
+                        Text(
+                            "Falling blocks and sand to rake, in Take a moment. Off takes them out of the menu.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    DaymarkSwitch(checked = calmActivities, onCheckedChange = viewModel::setCalmActivities)
                 }
             }
             NavRow("Preview it", "See what's offered", onPreview)
