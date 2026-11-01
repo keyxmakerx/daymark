@@ -13,8 +13,6 @@ All notable changes to this project are documented here. The format is based on
   server cannot read them, and they stay with you if the client stops sharing. You can download a
   plain copy for your records. Leaving a relationship now warns that your notes cannot be opened
   afterwards.
-- **Two calm activities in Take a moment.** **Falling blocks** (turn and place small shapes; a full
-  row goes) and **Sand to rake** (draw in the sand, then smooth it). Nothing is counted, there is
 - **Three calm activities in Take a moment.** **Falling blocks** (turn and place small shapes; a
   full row goes), **Sand to rake** (draw in the sand, then smooth it) and **Tidy a little shelf**
   (put books on a shelf in any order; a firm shake, or the Shake button, tumbles them loose). Nothing is counted, there is
