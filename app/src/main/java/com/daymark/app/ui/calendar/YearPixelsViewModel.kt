@@ -19,8 +19,10 @@ import javax.inject.Inject
 
 data class YearPixelsUiState(
     val year: Int = LocalDate.now().year,
-    /** date -> average mood level (1..5) for days that have entries. */
+    /** date -> average mood level (1..5) for days that have entries; the year's stars read it. */
     val dayMoods: Map<LocalDate, Double> = emptyMap(),
+    /** date -> every entry's mood level that day; the year grid reads it, never an average. */
+    val dayLevels: Map<LocalDate, List<Int>> = emptyMap(),
 )
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -31,18 +33,22 @@ class YearPixelsViewModel @Inject constructor(
 
     private val year = MutableStateFlow(LocalDate.now().year)
 
-    private val dayMoods = year.flatMapLatest { y ->
+    private val dayLevels = year.flatMapLatest { y ->
         val from = DateUtils.startOfDay(LocalDate.of(y, 1, 1))
         val to = DateUtils.endOfDay(LocalDate.of(y, 12, 31))
         entryRepository.observeBetween(from, to).map { entries ->
             entries
                 .groupBy { DateUtils.toLocalDate(it.entry.dateTime) }
-                .mapValues { (_, list) -> list.map { it.entry.moodLevel }.average() }
+                .mapValues { (_, list) -> list.map { it.entry.moodLevel } }
         }
     }
 
-    val uiState: StateFlow<YearPixelsUiState> = combine(year, dayMoods) { y, moods ->
-        YearPixelsUiState(year = y, dayMoods = moods)
+    val uiState: StateFlow<YearPixelsUiState> = combine(year, dayLevels) { y, levels ->
+        YearPixelsUiState(
+            year = y,
+            dayMoods = levels.mapValues { (_, l) -> l.average() },
+            dayLevels = levels,
+        )
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5_000),
