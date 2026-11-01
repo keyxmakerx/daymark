@@ -7,6 +7,10 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Added
+- **Clinicians' notes have a locked copy on the server.** The Notes page keeps your notes in this
+  browser and as a copy on the server that only you can open, and notes written in another tab or
+  browser are brought together note by note. The server cannot read them and the client cannot reach
+  them. Leaving a relationship deletes the server copy.
 - **Clinicians can keep their own notes.** The clinician console has a Notes page. Each note follows
   your discipline's parts, has a day and tags, and can be found by searching any words in it or by
   choosing tags. Notes are locked to your key and kept only in this browser, so the client and the

@@ -268,6 +268,34 @@ export class PortalClient {
   }
 
   /**
+   * The clinician's own locked notebook on the server (#548): the sealed blob and its version, or
+   * a null blob when none has been kept yet. Session cookie only; the relRef comes from the
+   * session, as everywhere on this client. The server cannot open the blob (notes/vault.ts).
+   */
+  async readNotes(session: SessionInfo): Promise<{ version: number; blob: string | null }> {
+    const res = await this.req(`/v1/relations/${encodeURIComponent(session.relRef)}/notes`, { cache: 'no-store' })
+    const version = Number(res.headers.get('X-Notes-Version') ?? 'NaN')
+    if (res.status === 204 && Number.isFinite(version)) return { version, blob: null }
+    if (res.status === 200 && Number.isFinite(version)) return { version, blob: await res.text() }
+    throw new PortalError('could not read the notes kept on the server', res.status)
+  }
+
+  /**
+   * Replaces the notebook, based on the version this client last read. A 409 is an answer, not a
+   * failure: someone wrote first, and the caller merges and tries again (notes/sync.ts).
+   */
+  async writeNotes(session: SessionInfo, basedOn: number, blob: string): Promise<{ state: 'written'; version: number } | { state: 'conflict'; current: number }> {
+    const res = await this.req(`/v1/relations/${encodeURIComponent(session.relRef)}/notes`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/octet-stream', 'X-CSRF-Token': session.csrf, 'X-Notes-Base': String(basedOn) },
+      body: blob,
+    })
+    if (res.status === 200) return { state: 'written', version: Number((await res.json()).version) }
+    if (res.status === 409) return { state: 'conflict', current: Number((await res.json()).current) }
+    throw new PortalError('could not keep the notes on the server', res.status)
+  }
+
+  /**
    * The owner's published public keys for this relationship.
    *
    * This is what replaces two of the sign-in form's nine fields. The clinician used to paste the

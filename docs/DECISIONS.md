@@ -427,11 +427,12 @@ pattern of dots rather than a sky, and brightness drawn from identity ranks no d
 A clinician writes notes about their work with a client in the console's Notes page. The notes are
 the clinician's writing, not the client's data, so they stay with the clinician when the client
 stops sharing, as most places require clinicians to keep records. They are locked to a key derived
-from the clinician's own box key, so neither the client nor the server can read them. Today they are
-kept only in the clinician's browser (`companion/web/src/lib/notes/vault.ts`); a notebook that does
-not open is reported and never written over. Leaving the relationship removes that key, and the
-leave confirmation says so before the click. Not built: a server copy and search across clients,
-#548.
+from the clinician's own box key, so neither the client nor the server can read them. The sealed
+notebook is kept in the clinician's browser and as a copy on the server that only the clinician's
+session can reach (`companion/web/src/lib/notes/vault.ts`, `companion/web/src/lib/notes/sync.ts`); a
+copy that does not open is reported and never written over. Leaving the relationship removes the key
+and deletes the server copy, and the leave confirmation says so before the click. Not built: keeping
+the key itself on the server so a new browser can open the notes, and search across clients, #548.
 
 ## Decisions recorded in closed issues
 
