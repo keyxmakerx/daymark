@@ -43,6 +43,11 @@
 
   let session = $state<OwnerSession | null>(null)
   let sub = $state<Sub>('grants')
+  const SUB_GROUPS: { label: string; items: [Sub, string][] }[] = [
+    { label: 'Sharing', items: [['share', 'Share'], ['grants', 'Grants'], ['inbox', 'Inbox'], ['access-log', 'Access log']] },
+    { label: 'Your records', items: [['review', 'Review']] },
+    { label: 'Keys and alerts', items: [['published-keys', 'Published keys'], ['pins', 'Pinned keys'], ['notify', 'Notifications']] },
+  ]
   let selectedId = $state<string | null>(null)
   /*
    * The pairing screen outlives the moment it stops being needed. `keysArrived` flips keysPending
@@ -189,15 +194,24 @@
 {:else}
   <section class="console">
     <div class="topline">
+      <!--
+        The calmer layout from the signed-off design: eight equal buttons in one row became three
+        named groups, so a person finds a place by what it is for. Sharing first, because it is what
+        a person comes here to do; then their own records; then the keys and alerts they set once.
+        The current place is an underline, structure in the structural accent; aria-pressed
+        carries it too, so colour is never the only signal.
+      -->
       <nav class="tabs subnav" aria-label="Owner console section">
-        <button class:active={sub === 'review'} aria-pressed={sub === 'review'} onclick={() => (sub = 'review')}>Review</button>
-        <button class:active={sub === 'grants'} aria-pressed={sub === 'grants'} onclick={() => (sub = 'grants')}>Grants</button>
-        <button class:active={sub === 'inbox'} aria-pressed={sub === 'inbox'} onclick={() => (sub = 'inbox')}>Inbox</button>
-        <button class:active={sub === 'published-keys'} aria-pressed={sub === 'published-keys'} onclick={() => (sub = 'published-keys')}>Published keys</button>
-        <button class:active={sub === 'share'} aria-pressed={sub === 'share'} onclick={() => (sub = 'share')}>Share</button>
-        <button class:active={sub === 'access-log'} aria-pressed={sub === 'access-log'} onclick={() => (sub = 'access-log')}>Access log</button>
-        <button class:active={sub === 'notify'} aria-pressed={sub === 'notify'} onclick={() => (sub = 'notify')}>Notifications</button>
-        <button class:active={sub === 'pins'} aria-pressed={sub === 'pins'} onclick={() => (sub = 'pins')}>Pinned keys</button>
+        {#each SUB_GROUPS as group (group.label)}
+          <div class="group" role="group" aria-label={group.label}>
+            <span class="group-label" aria-hidden="true">{group.label}</span>
+            <div class="group-items">
+              {#each group.items as [id, label] (id)}
+                <button class:active={sub === id} aria-pressed={sub === id} onclick={() => (sub = id)}>{label}</button>
+              {/each}
+            </div>
+          </div>
+        {/each}
       </nav>
       <button class="lock" onclick={lock}>Lock console</button>
     </div>
@@ -324,12 +338,17 @@
 <style>
   .console { display: flex; flex-direction: column; gap: var(--space-4); }
   .topline { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); flex-wrap: wrap; }
-  .tabs { display: flex; gap: var(--space-2); }
+  .tabs { display: flex; flex-wrap: wrap; gap: var(--space-3) var(--space-6); }
+  .group { display: flex; flex-direction: column; gap: var(--space-1); }
+  .group-label { font-size: 0.7rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-soft); }
+  .group-items { display: flex; flex-wrap: wrap; gap: var(--space-1); }
+  .tabs button { border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: none; padding: var(--space-1) var(--space-2); color: var(--ink-soft); }
+  .tabs button:hover { color: var(--ink-text); }
   /* The active tab is structure, not content: --indigo is the system's one accent for "where
      you are" (active nav, links, focus ring). --ink-accent is the content ink and reads as
      emphasis on a person's material, which a section tab is not. aria-pressed already carries
      the selection for assistive tech, so the fill is never the only signal. */
-  .tabs button.active { background: var(--indigo); color: var(--on-accent); border-color: var(--indigo); }
+  .tabs button.active { color: var(--ink-text); font-weight: 600; border-bottom-color: var(--indigo); }
   .conn { border: 1px solid var(--hairline); border-radius: var(--radius-sm); padding: var(--space-2) var(--space-3); }
   .conn summary { cursor: pointer; font-size: 0.9rem; color: var(--ink-soft); }
   .conn-body { display: flex; flex-direction: column; gap: var(--space-2); margin-top: var(--space-3); }

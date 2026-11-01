@@ -7,6 +7,12 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Added
+- **Clinicians can keep their own notes.** The clinician console has a Notes page. Each note follows
+  your discipline's parts, has a day and tags, and can be found by searching any words in it or by
+  choosing tags. Notes are locked to your key and kept only in this browser, so the client and the
+  server cannot read them, and they stay with you if the client stops sharing. You can download a
+  plain copy for your records. Leaving a relationship now warns that your notes cannot be opened
+  afterwards.
 - **An invitation can be shown as a code.** After you create an invite link for a clinician, **Show
   as a code** draws it as a QR code, so a clinician in the room can open it with their phone's
   camera instead of being sent the link. The screen says that anyone who can see it can open it,
@@ -83,6 +89,8 @@ All notable changes to this project are documented here. The format is based on
   feel like too much**, which always leads to the crisis screen (#482).
 
 ### Changed
+- **Your own console's tabs are grouped.** The eight tabs above your console sit in three named
+  groups: Sharing, Your records, and Keys and alerts. The tab you are on is underlined.
 - **The clinician console is calmer.** Once you sign in, it uses the same side rail as the practice
   and admin consoles. Places are grouped as Their share, Send, Tools and This browser, with one
   thing on the screen at a time. Your discipline and Log out sit at the foot of the rail. On a phone
