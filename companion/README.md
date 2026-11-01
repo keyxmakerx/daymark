@@ -31,9 +31,10 @@ topology, the proxy contract, every setting, backup and restore:
   assignments, game plans, leaving). **With `practice`**, the practice console as well. The phone's
   `sync` build invites and approves clinicians too, and receives their game plans and suggestions
   in an inbox, where nothing is added until the owner accepts it.
-- **Optional email (SMTP)**, off unless configured: invitation links, owner notifications, and
-  recovery of the owner's access token, which the decided design replaces with proving the owner's
-  own key (#208; not built: #325). Emails carry links and event names, never record content.
+- **Optional email (SMTP)**, off unless configured: invitation links, owner notifications, and the
+  notice that someone got back in with the owner's recovery code. No email opens anything: a lost
+  sign-in comes back by proving the owner's own key (#325). Emails carry links and event names,
+  never record content.
 
 Not built, among others: passkey sign-in, decided in #205 with the six-digit code kept as the
 fallback (#326; today the WebAuthn routes answer 501 and the code is the clinician's sign-in),
@@ -107,10 +108,10 @@ The command-line writer then needs a credential of its own, made in the console'
 connection panel: it can read and write snapshots and nothing else, and it is set as
 `DAYMARK_CLI_TOKEN`. Each one can be revoked there.
 
-The decided design goes further (#208): a new server is claimed with a one-time code from its own
-log, and access comes back by proving the owner's own key, never by email. The server console
-already works this way (#322). Not built for the owner: claiming with a setup code, and recovery by
-key, #325.
+A lost sign-in comes back with the recovery code, on the owner page's "Recover access" card: the
+browser proves the owner's own key and the server replaces the sign-in (#325). The server console
+works the same way for administrators (#322). Not built for the owner: claiming a new server with a
+setup code (#208).
 
 ## Health checks
 
@@ -162,7 +163,7 @@ None of this is observable from a web page, so it is a list to check by hand:
 
 - The access token is set, and its file is readable by UID 65532.
 - `/readyz` answers 200, so `/data` is writable.
-- `DAYMARK_DOMAIN` is the real external hostname: invitation and recovery links are built from it.
+- `DAYMARK_DOMAIN` is the real external hostname: invitation links, and the address a recovery proof names, are built from it.
 - The proxy terminates TLS, sets HSTS, forwards the root paths, and is named exactly in
   `DAYMARK_TRUSTED_PROXIES`.
 - `DAYMARK_SETUP_MODE` is what this machine is for, and the log's `Serving the … shape` line agrees.

@@ -1,26 +1,25 @@
 /*
- * THE "RECOVER ACCESS" CARD: WHERE THE RECOVERY EMAIL IS REGISTERED, AND WHAT THE CARD SAYS (#330).
+ * THE "RECOVER ACCESS" CARD: WHERE THE NOTICE EMAIL IS REGISTERED, AND WHAT THE CARD SAYS (#330, #325).
  *
- * Access-token recovery sends a one-time link to the email address registered on the server
- * (routes/RecoveryRoutes.kt: the link's token is single-use and expires). That address is set by
- * PUT /v1/owner/notifications, which every shape serves. Where the owner console is offered, its
- * Notifications tab is where it is set, and this card points there. On a server whose published
- * shape withholds the owner console — solo — this card is the one place to set it, because the
- * route it calls is still served there.
+ * The card has two parts. "Before you need it" registers an email address. "If you have lost your
+ * sign-in" gets the owner back in with their recovery code (owner/recoverSignIn.ts); no email is
+ * involved in that, because a mailbox is not proof of who holds the journal (#325).
+ *
+ * The address is set by PUT /v1/owner/notifications, which every shape serves. Where the owner
+ * console is offered, its Notifications tab is where it is set, and this card points there. On a
+ * server whose published shape withholds the owner console — solo — this card is the one place to
+ * set it, because the route it calls is still served there.
  *
  * WHAT THE CARD'S SENTENCES CLAIM, CHECKED AGAINST THE SERVER.
  *
- *   A one-time link: the confirmation token is flipped to CONSUMED on use and has a TTL
- *   (OwnerAccountStore.confirmReissue).
+ *   A notice is sent when someone gets back in with the recovery code: OwnerRecoveryRoutes.kt sends
+ *   SecurityNotice(SIGN_IN_RECOVERED) to the registered address, when there is one, and only when
+ *   the server has outbound email, which is why [SENDING_NEEDS_EMAIL] stands beside the promise.
  *
- *   It is sent only when the address entered matches the registered one, and only when the server
- *   has outbound email: a server without it registers the address and sends nothing, which is
- *   why [SENDING_NEEDS_EMAIL] stands beside the promise in [LOST_TOKEN_LEDE]. With email on, the
- *   server refuses to start without the address the link is built from (Config.buildsLinks).
+ *   Nothing else is sent to it on a solo server: every other notification the owner can choose
+ *   comes from the clinician routes, which that shape switches off.
  *
- *   Nothing else is sent to it on a solo server: every notification the owner can choose comes
- *   from the clinician routes, which that shape switches off. What the recovery itself sends is
- *   the link, and a notice when the link re-issued the token.
+ *   The code stays on the page: only a signature made with the key it opens is sent.
  *
  * PURE. No fetch, no DOM, no Svelte. The one server call is [registerRecoveryEmail], and it takes
  * its client as an argument so a test can see exactly which route it reaches.
@@ -56,20 +55,20 @@ function linkTo(route: OwnerRouteId): RouteLink {
 
 /** The card's lead on a solo server, while no registered address is known to this page. */
 export const SUMMARY_UNREGISTERED =
-  'Set this up before you need it. If you lose your access token, a one-time link can be sent to ' +
-  'an email address you register here.'
+  'Set this up before you need it. Register an email address here, and if anyone gets back into ' +
+  'your server with your recovery code, a notice is sent to it.'
 
 /** The same lead once the server has said an address is registered. */
 export const SUMMARY_REGISTERED =
-  'A recovery email is registered. If you lose your access token, a one-time link can be sent to ' +
-  'it.'
+  'An email for notices is registered. If anyone gets back into your server with your recovery ' +
+  'code, a notice is sent to it.'
 
 export const BEFORE_YOU_NEED_IT = 'Before you need it'
 
 export const REGISTER_LEDE =
-  'Register an email address for recovery. Nothing else is sent to it on this server.'
+  'Register an email address for security notices. Nothing else is sent to it on this server.'
 
-export const EMAIL_LABEL = 'Recovery email'
+export const EMAIL_LABEL = 'Email for notices'
 /**
  * Beside the field, the same words the owner console's Notifications tab puts beside its own: the
  * address is kept in the clear on the server (COMPANION_SECURITY.md), and a person typing it here
@@ -79,46 +78,66 @@ export const EMAIL_STORED_NOTE = 'stored in plaintext on the server; see COMPANI
 
 export const REGISTER = 'Register'
 
-/**
- * Not in the copy pass's words, and needed by them: "You can change or remove it here" is true
- * only if something on the card removes it.
- */
+/** "You can change or remove it here" is true only if something on the card removes it. */
 export const REMOVE = 'Remove'
 
 /** Shown once the server says an address is registered. The address is the person's own. */
 export function registeredStatement(email: string): string {
-  return `Recovery email registered: ${email}. You can change or remove it here.`
+  return `Email for notices registered: ${email}. You can change or remove it here.`
 }
 
 /**
- * In place of the field, when this page holds no access token for the server. The token is the
+ * In place of the field, when this page holds no connection to the server. The connection is the
  * one the sync card proved by fetching with it (see App.svelte); nothing here asks for it again.
  */
 export const NEEDS_TOKEN =
-  'Registering an email needs your access token. Connect to your sync server first, then come ' +
-  'back here.'
+  'Registering an email needs a connection to your server. Connect to your sync server first, ' +
+  'then come back here.'
 
 /** Where the owner console is offered, the address is set there and this card says so. */
 export const OWNER_CONSOLE_POINTER =
   'Register or change the email in the owner console, under Notifications.'
 
-export const LOST_TOKEN_HEADING = 'If you have lost your access token'
+export const LOST_HEADING = 'If you have lost your sign-in'
 
-export const LOST_TOKEN_LEDE =
-  'If you registered a recovery email, enter it and a one-time link will be sent to it.'
+export const LOST_LEDE =
+  'Your recovery code gets you back in. Type it here with a new name and a new authenticator. ' +
+  'Every earlier sign-in is signed out, and your phones and clinicians stay as they are.'
+
+/** What leaves the page, said where the code is typed (recoverSignIn.ts keeps it true). */
+export const CODE_STAYS_HERE = 'The code stays on this page. Only a proof made with it is sent.'
 
 /**
- * The condition on the sentence above, said beside it: a server without outbound email registers
- * the address and sends nothing to it.
+ * The limit, said plainly. The server is never handed the passphrase lock, so the recovery code is
+ * the only thing this page can prove the owner with.
  */
-export const SENDING_NEEDS_EMAIL = 'That needs this server to be set up to send email.'
+export const CODE_IS_THE_ONLY_WAY =
+  'Getting back in this way needs your recovery code. Without it, nothing on this page can make ' +
+  'you a new sign-in.'
 
-/** The request with an empty address. Names the address the flow takes. */
-export const EMAIL_MISSING = 'Enter the recovery email you registered.'
+/**
+ * The condition on the notice: a server without outbound email registers the address and sends
+ * nothing to it.
+ */
+export const SENDING_NEEDS_EMAIL = 'A notice needs this server to be set up to send email.'
 
-export const LOAD_FAILED = 'This page could not read the recovery email registered on your server.'
+export const NEW_NAME_LABEL = 'A name, as you will type it to sign in'
+export const NEW_AUTHENTICATOR = 'A new authenticator'
+export const NEW_AUTHENTICATOR_LEDE =
+  'Add this key to an authenticator app, by scanning or typing the groups below. The old one stops ' +
+  'working once you are back in.'
+export const DIGITS_LABEL = 'The six digits your authenticator shows now'
+export const GET_BACK_IN = 'Get back in'
+export const GETTING_BACK_IN = 'Checking…'
 
-export const SAVE_FAILED = 'That change to the recovery email could not be saved.'
+/** After it worked. Stated in words, in ink: there is no success hue. */
+export const BACK_IN =
+  'You are signed in with your new sign-in, and every earlier sign-in is signed out. Unlock as ' +
+  'usual to carry on.'
+
+export const LOAD_FAILED = 'This page could not read the email registered on your server.'
+
+export const SAVE_FAILED = 'That change to the email could not be saved.'
 
 /* ═══════════════════════════════════════════════════════════════════════════════════════════
    2. What the card shows.
@@ -131,21 +150,23 @@ export type RecoverSetup =
   /** Solo, and this page holds no access token to register with: a link to the sync card. */
   | { kind: 'needs-token'; text: string; link: RouteLink }
   /** Solo, with a token: the field, and the registered address when the server has said one. */
-  | { kind: 'register'; lede: string; registered: string | null; canRemove: boolean }
+  | { kind: 'register'; lede: string; note: string; registered: string | null; canRemove: boolean }
 
 export interface RecoverCardView {
   /** The card's lead, or null where the owner console holds the setting. */
   summary: string | null
   setup: RecoverSetup
   lostHeading: string
-  /** The lost-token part's sentences, in order. */
+  /** The lost-sign-in part's sentences, in order. */
   lostLede: readonly string[]
+  /** Where to go once back in: the owner console where it is offered, otherwise the sync card. */
+  afterRecovery: RouteLink
 }
 
 export interface RecoverCardInputs {
   /** Whether the owner's page offers the owner console (`offersRoute`, onboarding/audience.ts). */
   ownerConsoleOffered: boolean
-  /** Whether this page holds an access token the server has accepted. */
+  /** Whether this page holds a connection the server has accepted. */
   connected: boolean
   /** The address the server says is registered, or null when none is, or none has been read. */
   registered: string | null
@@ -163,7 +184,11 @@ export function recoverCardView({
   connected,
   registered,
 }: RecoverCardInputs): RecoverCardView {
-  const lost = { lostHeading: LOST_TOKEN_HEADING, lostLede: [LOST_TOKEN_LEDE, SENDING_NEEDS_EMAIL] }
+  const lost = {
+    lostHeading: LOST_HEADING,
+    lostLede: [LOST_LEDE, CODE_IS_THE_ONLY_WAY],
+    afterRecovery: linkTo(ownerConsoleOffered ? 'owner' : 'sync'),
+  }
   if (ownerConsoleOffered) {
     return {
       summary: null,
@@ -180,7 +205,7 @@ export function recoverCardView({
   }
   return {
     summary: registered === null ? SUMMARY_UNREGISTERED : SUMMARY_REGISTERED,
-    setup: { kind: 'register', lede: REGISTER_LEDE, registered, canRemove: registered !== null },
+    setup: { kind: 'register', lede: REGISTER_LEDE, note: SENDING_NEEDS_EMAIL, registered, canRemove: registered !== null },
     ...lost,
   }
 }

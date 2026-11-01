@@ -35,7 +35,7 @@ object MailContentGuard {
         val url = urlOf(msg)
         url?.let { assertUrl(it, allowInsecureLinks) }
 
-        // Whitelist: fixed template text + the URL + (invite/recovery) the ISO expiry + display name.
+        // Whitelist: fixed template text + the URL + (invite) the ISO expiry + display name.
         val allowedFragments = mutableListOf<String>()
         when (msg) {
             is MailMessage.TherapistInvite -> {
@@ -49,12 +49,6 @@ object MailContentGuard {
                 allowedFragments += MailTemplates.REVIEW_SUBJECT
                 allowedFragments += REVIEW_TEMPLATE_TOKENS
                 allowedFragments += url.toString()
-            }
-            is MailMessage.AccessRecovery -> {
-                allowedFragments += MailTemplates.RECOVERY_SUBJECT
-                allowedFragments += RECOVERY_TEMPLATE_TOKENS
-                allowedFragments += url.toString()
-                allowedFragments += ISO.format(msg.expiresAt)
             }
             is MailMessage.SecurityNotice -> {
                 allowedFragments += MailTemplates.SECURITY_SUBJECT
@@ -104,7 +98,6 @@ object MailContentGuard {
     private fun urlOf(msg: MailMessage): URI? = when (msg) {
         is MailMessage.TherapistInvite -> msg.inviteUrl
         is MailMessage.ReviewNotification -> msg.portalUrl
-        is MailMessage.AccessRecovery -> msg.confirmUrl
         is MailMessage.SecurityNotice -> null
     }
 
@@ -151,22 +144,14 @@ object MailContentGuard {
         "This email contains no personal or health information.",
     )
 
-    private val RECOVERY_TEMPLATE_TOKENS = listOf(
-        "A request was made to recover access to your Daymark Companion server.",
-        "If this was you, open this single-use link to continue:",
-        "This link expires at",
-        "If you did not request this, you can ignore this email — nothing changes unless the link above is opened.",
-        "This email contains no personal or health information.",
-    )
-
     private fun securityTemplateTokens(event: MailMessage.SecurityEvent): List<String> {
         val eventLine = when (event) {
-            MailMessage.SecurityEvent.TOKEN_REISSUED ->
-                "Your Daymark Companion server access token was just re-issued. The previous token no longer works."
+            MailMessage.SecurityEvent.SIGN_IN_RECOVERED ->
+                "Someone got back into your Daymark Companion with your recovery code and made a new sign-in. Every earlier sign-in has been signed out."
         }
         return listOf(
             eventLine,
-            "If you did not do this, your registered email address may be compromised — check your Companion deployment.",
+            "If you did not do this, someone else may have your recovery code. Sign in to your Companion and check your paired phones and clinicians.",
             "This email contains no personal or health information.",
         )
     }

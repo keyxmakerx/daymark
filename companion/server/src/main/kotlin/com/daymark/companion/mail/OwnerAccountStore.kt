@@ -9,25 +9,17 @@ import com.daymark.companion.storage.SchemaChange
 import java.nio.file.Files
 import java.nio.file.Path
 import java.sql.Connection
-import java.util.concurrent.ConcurrentHashMap
 
 /** The owner's registered notification address + which [MailMessage.ReviewKind] events it wants. */
 data class NotificationSettings(val email: String?, val events: Set<MailMessage.ReviewKind>)
 
-/** A minted, single-use recovery-confirmation link (the owner's access-token re-issue). */
-data class ReissueMint(val email: String, val confirmToken: String, val expiresAt: Long)
-
-sealed interface ReissueConfirmOutcome {
-    /** The new token, and the device keys the re-issue revoked with it (#186), each owed an audit row. */
-    data class Rotated(val newToken: String, val revokedDevices: List<String> = emptyList()) : ReissueConfirmOutcome
-    data object Gone : ReissueConfirmOutcome
-}
-
 /**
- * Server-side state for the owner's email (COMPANION_SECURITY.md §6, "Owner notifications and
- * server-access recovery"): the owner's registered notification email + per-event preferences,
- * the currently accepted owner/bearer token (rotatable via the email-triggered recovery flow,
- * durable across restarts), and single-use recovery-confirmation tokens. One SQLite file per data
+ * Server-side state for the owner (COMPANION_SECURITY.md §6, "Owner notifications"): the owner's
+ * registered notification email + per-event preferences, the digest of the accepted owner/bearer
+ * token (durable across restarts, changed only by the operator's `DAYMARK_AUTH_TOKEN`), the owner's
+ * own account ([signIn]) and the phones paired to the owner. Nothing here sends a token by email:
+ * getting back in proves the owner's own key (#325). Version 1 of the schema still creates the
+ * `reissue_confirm` table, and nothing reads or writes it. One SQLite file per data
  * dir, independent of the therapist-portal feature flag — the bearer token also gates the plain
  * sync API, which does not need the portal.
  *
@@ -64,12 +56,10 @@ class OwnerAccountStore(
     private val root: Path = Path.of(dataDir).toAbsolutePath().normalize()
     private val lock = Any()
     private val conn: Connection
-    private val requestBuckets = ConcurrentHashMap<String, Bucket>()
-    private class Bucket(var tokens: Double, var last: Long)
 
     /**
      * The owner's id and the phones registered to it (#186, #189), on this database's connection and
-     * under its lock, so a re-issued token and the revocation of every device are one transaction.
+     * under its lock, so a changed token and the revocation of every device are one transaction.
      */
     val devices: DeviceKeyStore
 
@@ -105,10 +95,9 @@ class OwnerAccountStore(
      * - First boot ever (no row): seed both `token` and `bootstrap_token` from the env value's
      *   digest.
      * - Operator changed the env var since last boot (redeploy-with-a-new-secret-file, the
-     *   rotation method already documented in COMPANION_DEPLOYMENT.md): the env value WINS,
-     *   overwriting any since-rotated token — the operator's explicit action takes precedence.
-     * - Env var unchanged since last boot: keep whatever is stored, including a token rotated at
-     *   runtime via [rotateToken] (so the email-recovery flow survives a restart).
+     *   rotation method documented in COMPANION_DEPLOYMENT.md): the env value's digest is stored.
+     *   This is the only way the token changes: nothing re-issues it at runtime (#325).
+     * - Env var unchanged since last boot: keep what is stored.
      *
      * **Migration note (issue #113):** a deployment upgraded from before this change has a
      * *plaintext* value sitting in `bootstrap_token`. A digest can never equal that plaintext
@@ -117,9 +106,7 @@ class OwnerAccountStore(
      * columns from the current env value's digest — exactly the re-hash-on-next-bootstrap
      * behaviour this migration wants. This is safe, never a lockout: `DAYMARK_AUTH_TOKEN` is the
      * operator's own secret and is unchanged by this deploy, so it still authorises after the
-     * reseed. The one side effect is that a token rotated at runtime (via the email-recovery
-     * flow) before the upgrade does not survive this specific boot — the server reverts to
-     * accepting the operator's env-var token, which the operator can always still present.
+     * reseed.
      */
     private fun bootstrapToken(envToken: String): List<String> {
         val envHash = Secrets.tokenHash(envToken)
@@ -136,8 +123,8 @@ class OwnerAccountStore(
             }
             return emptyList()
         }
-        // A token the operator sets is a re-issue like the emailed one, and disconnects every paired
-        // phone in the same transaction (#186). A first start has none to disconnect.
+        // A token the operator sets is a re-issue, and disconnects every paired phone in the same
+        // transaction (#186). A first start has none to disconnect.
         return conn.inTransaction {
             val revoked = devices.revokeAllLocked(devices.ownerId)
             conn.prepareStatement(
@@ -153,37 +140,13 @@ class OwnerAccountStore(
     /**
      * The digest of the currently accepted owner/bearer token — what
      * [com.daymark.companion.auth.AuthGuard] is constructed and [rotated][com.daymark.companion.auth.AuthGuard.rotate]
-     * with at boot / on reissue. Never the plaintext token: only [Secrets.tokenHash] of it is
+     * with at boot. Never the plaintext token: only [Secrets.tokenHash] of it is
      * ever persisted, so there is no plaintext here to return.
      */
     fun currentTokenHash(): String = synchronized(lock) {
         conn.prepareStatement("SELECT token FROM owner_token WHERE id=1").use { ps ->
             ps.executeQuery().use { rs -> rs.next(); rs.getString(1) }
         }
-    }
-
-    /**
-     * Generate a fresh token, persist its digest (keeping `bootstrap_token` — the env-var
-     * watermark — unchanged), and return the plaintext. The plaintext is deliberately handed back
-     * to the caller here and nowhere else: this is the one moment it exists outside the owner's
-     * own head, on its way to the recovery-confirm HTTP response / the caller's `onRotated`
-     * callback, and it is never itself stored.
-     */
-    fun rotateToken(): String = synchronized(lock) { rotateLocked().first }
-
-    /**
-     * [rotateToken], and the ids of the device keys it revoked. Re-issuing the token revokes every
-     * device key of the owner, in the transaction that writes the new digest (#186); a phone pairs
-     * again by QR. Revoked first, so no moment has the new token standing beside a device the old one
-     * paired.
-     */
-    private fun rotateLocked(): Pair<String, List<String>> = conn.inTransaction {
-        val revoked = devices.revokeAllLocked(devices.ownerId)
-        val newToken = Secrets.newToken()
-        conn.prepareStatement("UPDATE owner_token SET token=?, updated_at=? WHERE id=1").use { ps ->
-            ps.setString(1, Secrets.tokenHash(newToken)); ps.setLong(2, clock()); ps.executeUpdate()
-        }
-        newToken to revoked
     }
 
     // ---- Notification email + prefs -----------------------------------------------
@@ -202,14 +165,10 @@ class OwnerAccountStore(
 
     /**
      * Set/change/remove the registered email + which [MailMessage.ReviewKind] events it wants.
-     * A null [email] disables all content notifications (the feature no-ops); it does NOT clear
-     * the recovery capability retroactively — a null email simply means [requestReissue] never
-     * matches, since there is nothing registered to match against.
+     * A null [email] disables every notice, the security receipt of a recovery included.
      *
-     * The email is normalized to lowercase before storage (matching [requestReissue]'s compare) —
-     * email addresses are near-universally treated case-insensitively in practice, and without
-     * this an owner who registers `Owner@Example.org` but later requests recovery with the
-     * everyday lowercase form would silently never match.
+     * The email is normalized to lowercase before storage: addresses are near-universally treated
+     * case-insensitively, and one spelling keeps the stored value comparable.
      */
     fun setNotificationSettings(email: String?, events: Set<MailMessage.ReviewKind>) = synchronized(lock) {
         conn.prepareStatement(
@@ -230,103 +189,9 @@ class OwnerAccountStore(
         }
     }
 
-    // ---- Access-token recovery (request → single-use confirm) ---------------------
-
-    /**
-     * Heavily-rate-limited token-bucket gate for the unauthenticated request endpoint, keyed on
-     * the caller's trusted source identity (socket peer, matching [com.daymark.companion.auth.AuthGuard]'s
-     * convention). Independent of `AuthGuard`'s own limiter — a different resource, a different
-     * knob (`DAYMARK_REISSUE_MAX_PER_HOUR`).
-     */
-    fun allowReissueAttempt(sourceId: String, maxPerHour: Int): Boolean {
-        val now = clock()
-        val cap = maxPerHour.toDouble().coerceAtLeast(1.0)
-        evictBucketsIfLarge(cap, now)
-        val refillPerMs = cap / 3_600_000.0
-        val b = requestBuckets.computeIfAbsent(sourceId) { Bucket(cap, now) }
-        synchronized(b) {
-            val elapsed = (now - b.last).coerceAtLeast(0)
-            b.tokens = (b.tokens + elapsed * refillPerMs).coerceAtMost(cap)
-            b.last = now
-            return if (b.tokens >= 1.0) { b.tokens -= 1.0; true } else false
-        }
-    }
-
-    /**
-     * Keep the per-source bucket map from growing without bound under a many-source flood on this
-     * UNAUTHENTICATED endpoint — mirrors [com.daymark.companion.auth.AuthGuard.evictIfLarge]:
-     * when large, drop entries whose bucket has already fully refilled (no live rate-limit state).
-     */
-    private fun evictBucketsIfLarge(cap: Double, now: Long) {
-        if (requestBuckets.size <= MAX_RATE_ENTRIES) return
-        requestBuckets.entries.removeIf { e ->
-            synchronized(e.value) {
-                val elapsed = (now - e.value.last).coerceAtLeast(0)
-                e.value.tokens + elapsed * (cap / 3_600_000.0) >= cap
-            }
-        }
-    }
-
-    /**
-     * Mint a single-use, time-limited confirmation token IFF [presentedEmail] matches the
-     * registered address (constant-time compare). Returns null on any mismatch or when nothing
-     * is registered. Callers MUST respond identically whether this returns null or non-null —
-     * this method only decides whether to mint/send, never what the HTTP response looks like, so
-     * a source cannot distinguish "wrong email" from "right email" from the response alone.
-     */
-    fun requestReissue(presentedEmail: String, ttlSeconds: Long): ReissueMint? = synchronized(lock) {
-        val registered = registeredEmail() ?: return null
-        if (!Secrets.constantTimeEquals(presentedEmail.lowercase(), registered)) return null
-        val token = Secrets.newToken()
-        val now = clock()
-        val expiry = now + ttlSeconds * 1000
-        conn.prepareStatement(
-            "INSERT INTO reissue_confirm(token_hash, expiry, status, created_at) VALUES (?,?,?,?)",
-        ).use { ps ->
-            ps.setString(1, Secrets.tokenHash(token))
-            ps.setLong(2, expiry)
-            ps.setString(3, "PENDING")
-            ps.setLong(4, now)
-            ps.executeUpdate()
-        }
-        ReissueMint(registered, token, expiry)
-    }
-
-    /**
-     * Validate + consume a confirm token and rotate the owner token. Single-use (status flips to
-     * CONSUMED atomically under [lock]) and capped by TTL; expired-or-already-used tokens are
-     * indistinguishable [ReissueConfirmOutcome.Gone] (no oracle on which).
-     *
-     * [onRotated] is invoked with the new token from *inside* the same critical section that
-     * persists it (before [lock] is released) — callers use this to apply the rotation to the
-     * live [com.daymark.companion.auth.AuthGuard] atomically with the persist. Without this, two
-     * concurrent confirms (e.g. two valid pending links) could persist in one order but apply to
-     * the live guard in the other order, leaving the in-memory guard on a token that doesn't match
-     * what either caller was told or what a restart would load.
-     */
-    fun confirmReissue(confirmToken: String, onRotated: (String) -> Unit = {}): ReissueConfirmOutcome = synchronized(lock) {
-        val hash = Secrets.tokenHash(confirmToken)
-        val now = clock()
-        val row = conn.prepareStatement("SELECT expiry, status FROM reissue_confirm WHERE token_hash=?").use { ps ->
-            ps.setString(1, hash)
-            ps.executeQuery().use { rs -> if (rs.next()) rs.getLong(1) to rs.getString(2) else null }
-        } ?: return ReissueConfirmOutcome.Gone
-        val (expiry, status) = row
-        if (status != "PENDING" || now >= expiry) return ReissueConfirmOutcome.Gone
-        conn.prepareStatement("UPDATE reissue_confirm SET status='CONSUMED' WHERE token_hash=?").use { ps ->
-            ps.setString(1, hash)
-            ps.executeUpdate()
-        }
-        val (newToken, revoked) = rotateLocked()
-        onRotated(newToken)
-        ReissueConfirmOutcome.Rotated(newToken, revoked)
-    }
-
     override fun close() = synchronized(lock) { conn.close() }
 
     companion object {
-        private const val MAX_RATE_ENTRIES = 50_000
-
         /**
          * owner-account.db, version by version (#193). [Schema] says what a version is, and how a
          * database written by an earlier release is brought to [Schema.current] before it is served.
@@ -372,6 +237,8 @@ class OwnerAccountStore(
                 DeviceKeyStore.TABLES,
                 // Version 3: the owner's own account, its sessions and the CLI's credentials (#324).
                 OwnerSignIn.TABLES,
+                // Version 4: the owner's recovery key and the challenges a recovery signs (#325).
+                OwnerSignIn.RECOVERY_TABLES,
             ),
         )
     }

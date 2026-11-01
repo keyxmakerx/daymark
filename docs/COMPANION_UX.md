@@ -204,10 +204,27 @@ no longer works (#407).
    it already sent stays on this server. To sync again it must pair again."* with **Keep it paired** and
    **Disconnect this phone**. The person's word is *disconnect* everywhere; *revoke* stays with shares
    and grants.
-5. Directly above the access token's re-issue, always: *"Re-issuing your access token disconnects every
-   paired phone. Each one must pair again before it can sync."*, or, with a count the proved connection
-   can read, *"…disconnects all 3 paired phones."* and *"…disconnects your 1 paired phone."*
-6. Whether a phone can carry a name kept only in the browser is #424.
+5. Whether a phone can carry a name kept only in the browser is #424.
+
+### 7.13 Getting back in with the recovery code (owner)
+
+The "Recover access" card, on the owner's page (`companion/web/src/lib/owner/recoveryEmail.ts` holds
+every word).
+
+1. *"If you have lost your sign-in"*, then *"Your recovery code gets you back in. Type it here with a
+   new name and a new authenticator. Every earlier sign-in is signed out, and your phones and
+   clinicians stay as they are."* and the limit, plainly: *"Getting back in this way needs your
+   recovery code. Without it, nothing on this page can make you a new sign-in."*
+2. The code is typed into the six group boxes the Recovery code screen uses (§7.10), with the same
+   diagnoses before anything is fetched, and beside them *"The code stays on this page. Only a proof
+   made with it is sent."*
+3. A new name, a new authenticator key drawn on the page and shown as a QR code and in groups, and
+   six digits. **Get back in** asks for a challenge, signs it and sends the new sign-in in one press.
+4. A code that does not open the key says the Recovery code screen's sentence and sends nothing that
+   could change the sign-in. Every refusal is a fixed sentence by status (`owner/account.ts`).
+5. After it: *"You are signed in with your new sign-in, and every earlier sign-in is signed out.
+   Unlock as usual to carry on."*, in ink, with a link to the owner console, or to the sync card on a
+   solo server.
 
 ## 9. Consent and sharing (no dark patterns)
 
@@ -273,7 +290,7 @@ the posture of the surface you are on (`trust/posture.ts` decides which):
 | `local` | every other tab: opening a backup file, self-checks, the tool builder, the practice panel | *"Meant to run offline. This tab works on what is already in this browser and sends nothing — but a page cannot prove that about itself, and nothing yet lets you check this build against a published value."* |
 | `setup` | the first-run screen while it reads the server's configuration | *"This screen reads your server's configuration. It asks one thing — whether this deployment already names what this machine is for — and sends nothing about you or your journal. Once that question has an answer here, this page stops asking on load."* |
 | `sync` | connecting to sync | *"This tab talks to your server. Your passphrase and the decrypted entries stay in this browser; what crosses the network is ciphertext your server cannot read. It can still see that you synced, and when."* |
-| `account` | the owner console, account recovery | *"This tab sends data to your server. Account actions send identifiers, and recovery sends the email address you type. A share you seal leaves this browser too, as ciphertext sealed to one clinician's pinned key: the server can see that it exists and how big it is, not what is in it. Your passphrase stays in this browser."* |
+| `account` | the owner console, account recovery | *"This tab sends data to your server. Account actions send identifiers, and the email address you register. Getting back in sends a proof made with your recovery code, never the code. A share you seal leaves this browser too, as ciphertext sealed to one clinician's pinned key: the server can see that it exists and how big it is, not what is in it. Your passphrase stays in this browser."* |
 
 - It is plain grey-blue chrome (`--chrome`), never a mood wash, never green, and it has no amber
   state: amber is warn severity, and on the sync tab the strip sits directly above the lower-assurance

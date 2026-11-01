@@ -396,15 +396,6 @@ export const FORGET_REFUSED =
  */
 export const CONFIG_READING = `Reading ${CONFIG_PATH} to see whether this deployment already answers this.`
 
-/**
- * The recovery-link bypass. An emailed access-token recovery link lands on this page as `#t=…`,
- * and somebody following one at a bad moment must not meet a setup question first. The question
- * waits; it is not skipped, and the strip says so rather than leaving the machine looking set up.
- */
-export const RECOVERY_LINK_BYPASS =
-  'You arrived on a recovery link, so this page went straight there. It will ask what this ' +
-  'machine is for another time.'
-
 /* ── The practice panel ───────────────────────────────────────────────────────────────────── */
 
 /**

@@ -504,7 +504,6 @@ class ShapeRoutingTest {
             "GET /v1/snapshots", "GET /v1/snapshots/{lineage}",
             "GET /v1/snapshots/{lineage}/{version}", "PUT /v1/snapshots/{lineage}/{version}",
             "GET /v1/owner/notifications", "PUT /v1/owner/notifications",
-            "POST /v1/recovery/request", "POST /v1/recovery/confirm",
             // Pairing a phone, and the phones paired (#186, #189): a phone pairs to sync, in every shape.
             "GET /v1/devices", "POST /v1/devices/pairing", "GET /v1/devices/pairing/{codeId}",
             "POST /v1/devices/pairing/{codeId}/confirm", "POST /v1/devices/{keyId}/revoke",
@@ -515,6 +514,8 @@ class ShapeRoutingTest {
             "GET /v1/owner/account", "POST /v1/owner/account",
             "POST /v1/owner/session", "GET /v1/owner/session", "POST /v1/owner/session/logout",
             "POST /v1/owner/cli", "GET /v1/owner/cli", "POST /v1/owner/cli/{credentialId}/revoke",
+            // Getting back in by the owner's own key (#325).
+            "POST /v1/owner/recovery/challenge", "POST /v1/owner/recovery",
             // The server console (#322): every server is claimed and run by an administrator.
             "GET /v1/admin/status", "POST /v1/admin/claim", "POST /v1/admin/session",
             "POST /v1/admin/session/logout", "GET /v1/admin/overview",
@@ -527,7 +528,7 @@ class ShapeRoutingTest {
             "healthz" to Group.PROBE, "readyz" to Group.PROBE, "v1/config" to Group.PROBE,
             "v1/keyparams" to Group.SYNC, "v1/keydoc" to Group.SYNC, "v1/snapshots" to Group.SYNC,
             "v1/devices" to Group.SYNC,
-            "v1/owner" to Group.OWNER, "v1/recovery" to Group.OWNER,
+            "v1/owner" to Group.OWNER,
             "v1/admin" to Group.ADMIN,
             "v1/rel" to Group.CLINICIAN, "v1/invite" to Group.CLINICIAN, "v1/totp" to Group.CLINICIAN,
             "v1/session" to Group.CLINICIAN, "v1/webauthn" to Group.CLINICIAN, "v1/relations" to Group.CLINICIAN,

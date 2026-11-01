@@ -62,6 +62,7 @@ import {
 import { enrolExistingOwner, masterFromPassphrase, subkeysFromMaster, syncKeyFromMaster } from './migration'
 import type { RecoveryCode } from './recoveryCode'
 import { ownerIdentityFromMaster } from '../owner/identity'
+import { recoveryPublicKeyFromMaster } from '../owner/recoveryKey'
 import type { Identity } from '../share/pairing'
 
 /** One stored snapshot, by where the server files it. */
@@ -109,7 +110,7 @@ export type SetUpResult =
    * console's lane (lane/lane.ts, #345); the caller wipes its key when the console locks, or at once
    * if it has no lane to write.
    */
-  | { kind: 'stored'; recoveryCode: RecoveryCode; identity: Identity; lane: LaneKey }
+  | { kind: 'stored'; recoveryCode: RecoveryCode; identity: Identity; lane: LaneKey; recoveryPublicKey: Uint8Array }
   /**
    * The server took the create (201), and it could not be read back afterwards, however many times
    * it was asked. The lock the code opens is on the server, so the code is here to be shown: it is
@@ -296,6 +297,7 @@ async function store(
       recoveryCode,
       identity: ownerIdentityFromMaster(opened),
       lane: { syncKey: syncKeyFromMaster(opened), keyDocumentEtag: back.etag },
+      recoveryPublicKey: recoveryPublicKeyFromMaster(opened),
     }
   } finally {
     zeroizeDataKey(opened)

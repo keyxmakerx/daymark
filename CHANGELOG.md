@@ -39,8 +39,13 @@ All notable changes to this project are documented here. The format is based on
   authenticator app. Everything already on the server stays yours and your paired phones keep
   working; after that the token opens nothing, and the owner page asks for your name and six digits.
   The command-line writer gets a credential of its own from the console, set as `DAYMARK_CLI_TOKEN`,
-  which can only read and write backups and can be revoked there. Email recovery is switched off
-  once your sign-in is made (#324).
+  which can only read and write backups and can be revoked there (#324).
+- **Companion: lost your sign-in? Your recovery code gets you back in.** On the owner page's
+  **Recover access** card, type your recovery code, a new name and a new authenticator. The code
+  never leaves the page: only a proof made with it is sent. Every earlier sign-in is signed out,
+  your phones and clinicians stay as they are, and if you registered an email, a notice goes to it.
+  Making your sign-in now records the key this needs, so a sign-in made before this cannot be got
+  back this way. The server needs `DAYMARK_PUBLIC_BASE_URL` set for it (#325).
 - **A background for your phone, made from your sky.** **Background** on your sky makes a picture
   for your lock or home screen: **Space only**, your sky's colours and gas with none of your stars,
   or **With my stars**. Drag it or tap **Another view** to frame it, then your phone's own picker
@@ -179,6 +184,9 @@ All notable changes to this project are documented here. The format is based on
   rather than a lone dot (#398).
 
 ### Removed
+- **Companion: the emailed reset of the owner's access token.** No email can hand out a credential
+  any more; a lost sign-in comes back with the recovery code instead. `DAYMARK_REISSUE_MAX_PER_HOUR`
+  and `DAYMARK_REISSUE_CONFIRM_TTL_SECONDS` are no longer read (#325).
 - **Nothing ranks your activities by mood, and nothing names one on a hard day.** The cards
   "'X' goes with your better days … make it a gentle goal?" and "'X' tends to go with lower days"
   are gone, with their switch under Settings → Suggestions, and so are the Insights lists of what was

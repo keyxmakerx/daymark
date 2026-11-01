@@ -333,47 +333,6 @@ class DeviceKeyRevocationTest {
     }
 
     @Test
-    fun tokenReissueRevokesEveryDeviceKeyOfTheOwner() {
-        val server = server()
-        testApplication {
-            server.start(this)
-            val phones = listOf(TestPhone(), TestPhone())
-            phones.forEach { server.pair(client, it) }
-            phones.forEach { assertEquals(HttpStatusCode.OK, server.signedGet(client, it, "/v1/snapshots").status, "control: each phone works") }
-
-            // The emailed re-issue: a registered address, a confirmation link, and the confirm.
-            val notify = client.put("/v1/owner/notifications") {
-                header(HttpHeaders.Authorization, "Bearer ${server.authToken}")
-                contentType(ContentType.Application.Json)
-                setBody("""{"email":"owner@example.org","events":[]}""")
-            }
-            assertEquals(HttpStatusCode.NoContent, notify.status)
-            val link = assertNotNull(server.account.requestReissue("owner@example.org", ttlSeconds = 3_600))
-            val confirm = client.post("/v1/recovery/confirm") {
-                contentType(ContentType.Application.Json)
-                setBody("""{"confirmToken":"${link.confirmToken}"}""")
-            }
-            assertEquals(HttpStatusCode.OK, confirm.status)
-            val newToken = confirm.json().string("newToken")
-
-            phones.forEach { assertEquals(unauthorized, server.signedGet(client, it, "/v1/snapshots").let { r -> r.status to r.bodyAsText() }, "a re-issued token disconnects every phone") }
-            assertEquals(
-                listOf("device.registered", "device.registered", "device.revoked:reissue", "device.revoked:reissue"),
-                server.ownerLog(),
-                "one row for each phone the re-issue revoked",
-            )
-            // Control: the new token is the owner's, and a phone pairs again by QR.
-            val again = TestPhone()
-            val reissued = DeviceServer(dataDir = server.dataDir, authToken = newToken)
-            val minted = client.post("/v1/devices/pairing") { header(HttpHeaders.Authorization, "Bearer $newToken") }
-            assertEquals(HttpStatusCode.Created, minted.status)
-            assertEquals(HttpStatusCode.Accepted, server.redeem(client, again, minted.json().string("code")).status)
-            assertEquals(HttpStatusCode.Created, reissued.confirm(client, minted.json().string("codeId"), again.keyId).status)
-            assertEquals(HttpStatusCode.OK, server.signedGet(client, again, "/v1/snapshots").status)
-        }
-    }
-
-    @Test
     fun `a token the operator changes revokes every device key of the owner too`() {
         val first = server()
         val phone = TestPhone()

@@ -151,15 +151,15 @@ enum class SecurityEventType(val wire: String, val defaultSeverity: Severity) {
     /** A share read was refused because it had expired or been withdrawn. */
     SHARE_REFUSED("share.refused", Severity.NOTICE),
 
-    /** The unauthenticated access-token recovery request endpoint was reached. */
+    /** A recovery challenge was asked for, unauthenticated (`POST /v1/owner/recovery/challenge`, #325). */
     RECOVERY_REQUESTED("recovery.requested", Severity.NOTICE),
 
-    /** A recovery request was over its per-source hourly budget. */
+    /** A recovery challenge or attempt was over its per-source budget. */
     RECOVERY_RATE_LIMITED("recovery.rateLimited", Severity.WARNING),
 
     /**
-     * A recovery link was confirmed and **the owner bearer token was rotated**. The single
-     * highest-value line in this log: it is the one event that changes who can reach the data.
+     * Someone proved the owner's recovery key and **the owner's sign-in was replaced** (#325). The
+     * single highest-value line in this log: it is the one event that changes who can reach the data.
      */
     RECOVERY_CONFIRMED("recovery.confirmed", Severity.CRITICAL),
 

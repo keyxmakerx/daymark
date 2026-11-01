@@ -47,17 +47,21 @@ class OwnerSignIn internal constructor(
 
     /**
      * Make the owner's account, named [name], with the TOTP seed [secretB64] whose step [step] was
-     * just proved. Refused once the account exists, so whichever of two racing requests inserts first
+     * just proved, and the recovery public key [recoveryPublicKeyB64] (#325). Refused once the account exists, so whichever of two racing requests inserts first
      * makes it and the other is told it is already made.
      */
-    fun create(name: String, secretB64: String, step: Long): CreateStatus = synchronized(lock) {
+    fun create(name: String, secretB64: String, step: Long, recoveryPublicKeyB64: String): CreateStatus = synchronized(lock) {
         if (exists()) return CreateStatus.ALREADY_MADE
-        conn.prepareStatement(
-            "INSERT INTO owner_signin(owner_id, name, secret_b64, last_used_step, fail_count, locked_until, created_at) " +
-                "VALUES (?,?,?,?,0,0,?)",
-        ).use { ps ->
-            ps.setString(1, ownerId); ps.setString(2, name); ps.setString(3, secretB64); ps.setLong(4, step); ps.setLong(5, clock())
-            ps.executeUpdate()
+        conn.inTransaction {
+            conn.prepareStatement(
+                "INSERT INTO owner_signin(owner_id, name, secret_b64, last_used_step, fail_count, locked_until, created_at) " +
+                    "VALUES (?,?,?,?,0,0,?)",
+            ).use { ps ->
+                ps.setString(1, ownerId); ps.setString(2, name); ps.setString(3, secretB64); ps.setLong(4, step); ps.setLong(5, clock())
+                ps.executeUpdate()
+            }
+            // In the same transaction, so no account exists without the key that can recover it.
+            registerRecoveryKey(recoveryPublicKeyB64)
         }
         CreateStatus.OK
     }
@@ -242,7 +246,134 @@ class OwnerSignIn internal constructor(
         }
     }
 
+    // ---- Getting back in by the owner's own key (#325) ------------------------------
+
+    /**
+     * Record the owner's recovery public key, made with the account. Insert-only by primary key, like
+     * owner_keys: a second call, from any session, changes nothing and answers false, so whoever
+     * steals a session cannot swap in a key of their own and come back through recovery later.
+     */
+    fun registerRecoveryKey(publicKeyB64: String): Boolean = synchronized(lock) {
+        conn.prepareStatement(
+            "INSERT OR IGNORE INTO owner_recovery_key(owner_id, public_key_b64, created_at) VALUES (?,?,?)",
+        ).use { ps ->
+            ps.setString(1, ownerId); ps.setString(2, publicKeyB64); ps.setLong(3, clock())
+            ps.executeUpdate() > 0
+        }
+    }
+
+    /** The owner's recovery public key, or null when the account was made without one. */
+    fun recoveryKey(): String? = synchronized(lock) {
+        conn.prepareStatement("SELECT public_key_b64 FROM owner_recovery_key WHERE owner_id=?").use { ps ->
+            ps.setString(1, ownerId)
+            ps.executeQuery().use { rs -> if (rs.next()) rs.getString(1) else null }
+        }
+    }
+
+    data class RecoveryChallenge(val challengeId: String, val challenge: String, val expiresAt: Long)
+
+    /**
+     * A fresh challenge for the owner to sign, live for [ttlMs] and good once. Expired ones are
+     * swept here, so the table never holds more than the challenges asked for in one lifetime.
+     */
+    fun issueRecoveryChallenge(ttlMs: Long): RecoveryChallenge = synchronized(lock) {
+        val now = clock()
+        conn.prepareStatement("DELETE FROM owner_recovery_challenges WHERE expires_at <= ?").use { ps ->
+            ps.setLong(1, now); ps.executeUpdate()
+        }
+        val challengeId = "rc_" + Secrets.newToken(9)
+        val challenge = Secrets.newToken()
+        conn.prepareStatement(
+            "INSERT INTO owner_recovery_challenges(challenge_id, owner_id, challenge, expires_at) VALUES (?,?,?,?)",
+        ).use { ps ->
+            ps.setString(1, challengeId); ps.setString(2, ownerId); ps.setString(3, challenge); ps.setLong(4, now + ttlMs)
+            ps.executeUpdate()
+        }
+        RecoveryChallenge(challengeId, challenge, now + ttlMs)
+    }
+
+    /**
+     * Spend challenge [challengeId]: its text when it is this owner's, unexpired and unspent, else
+     * null. It is deleted in the same step whatever the signature then says, so no challenge is
+     * checked twice and a replay finds nothing.
+     */
+    fun spendRecoveryChallenge(challengeId: String): String? = synchronized(lock) {
+        val row = conn.prepareStatement(
+            "SELECT owner_id, challenge, expires_at FROM owner_recovery_challenges WHERE challenge_id=?",
+        ).use { ps ->
+            ps.setString(1, challengeId)
+            ps.executeQuery().use { rs -> if (rs.next()) Triple(rs.getString(1), rs.getString(2), rs.getLong(3)) else null }
+        } ?: return null
+        conn.prepareStatement("DELETE FROM owner_recovery_challenges WHERE challenge_id=?").use { ps ->
+            ps.setString(1, challengeId); ps.executeUpdate()
+        }
+        if (row.first != ownerId || row.third <= clock()) return null
+        row.second
+    }
+
+    /**
+     * Replace the sign-in after a recovery: the new name and TOTP seed, the step just proved, the
+     * lockout cleared, and every owner session ended, so whoever held the old sign-in is signed out.
+     * The account row, the owner's id, the recovery key, the paired phones and the CLI credentials
+     * stay as they were.
+     */
+    fun replaceSignIn(name: String, secretB64: String, step: Long): Boolean = synchronized(lock) {
+        val changed = conn.prepareStatement(
+            "UPDATE owner_signin SET name=?, secret_b64=?, last_used_step=?, fail_count=0, locked_until=0 WHERE owner_id=?",
+        ).use { ps ->
+            ps.setString(1, name); ps.setString(2, secretB64); ps.setLong(3, step); ps.setString(4, ownerId)
+            ps.executeUpdate() > 0
+        }
+        if (changed) {
+            conn.prepareStatement("DELETE FROM owner_sessions WHERE owner_id=?").use { ps ->
+                ps.setString(1, ownerId); ps.executeUpdate()
+            }
+        }
+        changed
+    }
+
     companion object {
+        /**
+         * The first line of every message a recovery signature covers. A signature made for anything
+         * else, a share or a grant or a phone's request, begins otherwise and cannot pass for one.
+         */
+        const val RECOVERY_CONTEXT = "daymark-owner-recovery-v1"
+
+        /**
+         * What the owner signs to get back in: the context, the owner's id, this server's public
+         * address and the challenge, one per line. The address is the one the person's browser is
+         * talking to, so a challenge relayed from another server is signed for the wrong address.
+         * companion/web/src/lib/owner/recoveryKey.ts builds the same bytes.
+         */
+        fun recoveryMessage(ownerId: String, address: String, challenge: String): ByteArray =
+            "$RECOVERY_CONTEXT\n$ownerId\n$address\n$challenge".toByteArray(Charsets.UTF_8)
+
+        /**
+         * owner-account.db version 4 (#325): the owner's recovery public key, insert-only, and the
+         * challenges a recovery signs, each good once.
+         */
+        internal val RECOVERY_TABLES: List<SchemaChange> = listOf(
+            SchemaChange.Table(
+                """
+                CREATE TABLE IF NOT EXISTS owner_recovery_key (
+                    owner_id       TEXT    NOT NULL PRIMARY KEY,
+                    public_key_b64 TEXT    NOT NULL,
+                    created_at     INTEGER NOT NULL
+                )
+                """.trimIndent(),
+            ),
+            SchemaChange.Table(
+                """
+                CREATE TABLE IF NOT EXISTS owner_recovery_challenges (
+                    challenge_id TEXT    NOT NULL PRIMARY KEY,
+                    owner_id     TEXT    NOT NULL,
+                    challenge    TEXT    NOT NULL,
+                    expires_at   INTEGER NOT NULL
+                )
+                """.trimIndent(),
+            ),
+        )
+
         /**
          * What every CLI token begins with, so the gate knows a CLI credential from the retired token
          * without a lookup that would let one be tried as the other.

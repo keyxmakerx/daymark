@@ -15,7 +15,13 @@ import * as recoveryCopy from '../components/recovery/copy'
 import {
   BEFORE_YOU_NEED_IT,
   EMAIL_LABEL,
-  EMAIL_MISSING,
+  BACK_IN,
+  CODE_STAYS_HERE,
+  DIGITS_LABEL,
+  GET_BACK_IN,
+  NEW_AUTHENTICATOR,
+  NEW_AUTHENTICATOR_LEDE,
+  NEW_NAME_LABEL,
   LOAD_FAILED,
   REGISTER,
   REMOVE,
@@ -231,11 +237,18 @@ describe('nothing on a published solo page points at the owner console it withho
       ...(view.summary ? [view.summary] : []),
       BEFORE_YOU_NEED_IT,
       ...(setup.kind === 'register'
-        ? [setup.lede, EMAIL_LABEL, REGISTER, REMOVE, ...(setup.registered ? [registeredStatement(setup.registered)] : [])]
+        ? [setup.lede, setup.note, EMAIL_LABEL, REGISTER, REMOVE, ...(setup.registered ? [registeredStatement(setup.registered)] : [])]
         : [setup.text, setup.link.label]),
       view.lostHeading,
       ...view.lostLede,
-      EMAIL_MISSING,
+      CODE_STAYS_HERE,
+      NEW_NAME_LABEL,
+      NEW_AUTHENTICATOR,
+      NEW_AUTHENTICATOR_LEDE,
+      DIGITS_LABEL,
+      GET_BACK_IN,
+      BACK_IN,
+      view.afterRecovery.label,
       LOAD_FAILED,
       SAVE_FAILED,
     ]

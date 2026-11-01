@@ -149,9 +149,9 @@ has taken in as `laneRecordsTakenIn` in the snapshot it uploads. The phone never
 snapshot under a `lane_` name. Not built: taking records in, #346; refusing to send over a copy this phone has not seen, and choosing automatically, #344. Refusing an older
 snapshot presented as the newest needs a signed manifest and a watermark kept on the device: #179.
 
-Neither the server nor anyone else can reset the app PIN or the sync passphrase. The owner's email
-recovery re-issues the server's bearer token and nothing else, which disconnects every paired phone;
-each pairs again with a new code.
+Neither the server nor anyone else can reset the app PIN or the sync passphrase. Getting back into
+the Companion with the recovery code (COMPANION_SECURITY.md §5.9) replaces the owner's sign-in and
+nothing else: paired phones stay paired.
 
 ## 3. Assignments and game plans, inbound
 

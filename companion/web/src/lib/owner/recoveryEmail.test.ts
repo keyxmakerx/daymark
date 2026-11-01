@@ -6,10 +6,12 @@ import {
   BEFORE_YOU_NEED_IT,
   EMAIL_LABEL,
   EMAIL_STORED_NOTE,
-  EMAIL_MISSING,
+  BACK_IN,
+  CODE_IS_THE_ONLY_WAY,
+  CODE_STAYS_HERE,
   LOAD_FAILED,
-  LOST_TOKEN_HEADING,
-  LOST_TOKEN_LEDE,
+  LOST_HEADING,
+  LOST_LEDE,
   NEEDS_TOKEN,
   OWNER_CONSOLE_POINTER,
   REGISTER,
@@ -33,7 +35,7 @@ import type { ShapeId } from '../setup/shape'
  * THE "RECOVER ACCESS" CARD (#330)
  *
  * On a server whose published shape withholds the owner console — solo — this card is the one
- * place to register the address a recovery link is sent to. Everywhere else the owner console's
+ * place to register the address a recovery notice is sent to. Everywhere else the owner console's
  * Notifications tab holds it, and the card points there. Five states, each a node test over the
  * module and a structural test over the component: solo without a token, solo with one, solo with
  * an address registered, paired, and no published shape.
@@ -63,23 +65,31 @@ function wordsOf(view: RecoverCardView): string[] {
   const setup = view.setup
   const setupWords =
     setup.kind === 'register'
-      ? [setup.lede, EMAIL_LABEL, REGISTER, ...(setup.registered ? [registeredStatement(setup.registered)] : [])]
+      ? [setup.lede, setup.note, EMAIL_LABEL, REGISTER, ...(setup.registered ? [registeredStatement(setup.registered)] : [])]
       : [setup.text, setup.link.label]
-  return [...(view.summary ? [view.summary] : []), BEFORE_YOU_NEED_IT, ...setupWords, view.lostHeading, ...view.lostLede]
+  return [
+    ...(view.summary ? [view.summary] : []),
+    BEFORE_YOU_NEED_IT,
+    ...setupWords,
+    view.lostHeading,
+    ...view.lostLede,
+    view.afterRecovery.label,
+  ]
 }
 
 describe('the words, as the copy pass settled them and as the server makes them true', () => {
   it('pins every sentence and label on the card', () => {
     expect(SUMMARY_UNREGISTERED).toBe(
-      'Set this up before you need it. If you lose your access token, a one-time link can be sent to ' +
-        'an email address you register here.',
+      'Set this up before you need it. Register an email address here, and if anyone gets back into ' +
+        'your server with your recovery code, a notice is sent to it.',
     )
     expect(SUMMARY_REGISTERED).toBe(
-      'A recovery email is registered. If you lose your access token, a one-time link can be sent to it.',
+      'An email for notices is registered. If anyone gets back into your server with your recovery ' +
+        'code, a notice is sent to it.',
     )
     expect(BEFORE_YOU_NEED_IT).toBe('Before you need it')
-    expect(REGISTER_LEDE).toBe('Register an email address for recovery. Nothing else is sent to it on this server.')
-    expect(EMAIL_LABEL).toBe('Recovery email')
+    expect(REGISTER_LEDE).toBe('Register an email address for security notices. Nothing else is sent to it on this server.')
+    expect(EMAIL_LABEL).toBe('Email for notices')
     // The field says the address is kept in the clear, in the Notifications tab's own words.
     const notifications = readFileSync(
       fileURLToPath(new URL('../components/owner/NotificationSettings.svelte', import.meta.url)),
@@ -91,36 +101,54 @@ describe('the words, as the copy pass settled them and as the server makes them 
     expect(REGISTER).toBe('Register')
     expect(REMOVE).toBe('Remove')
     expect(registeredStatement(EMAIL)).toBe(
-      'Recovery email registered: someone@example.org. You can change or remove it here.',
+      'Email for notices registered: someone@example.org. You can change or remove it here.',
     )
     expect(NEEDS_TOKEN).toBe(
-      'Registering an email needs your access token. Connect to your sync server first, then come back here.',
+      'Registering an email needs a connection to your server. Connect to your sync server first, then come back here.',
     )
     expect(OWNER_CONSOLE_POINTER).toBe('Register or change the email in the owner console, under Notifications.')
-    expect(LOST_TOKEN_HEADING).toBe('If you have lost your access token')
-    expect(LOST_TOKEN_LEDE).toBe('If you registered a recovery email, enter it and a one-time link will be sent to it.')
-    expect(SENDING_NEEDS_EMAIL).toBe('That needs this server to be set up to send email.')
-    expect(EMAIL_MISSING).toBe('Enter the recovery email you registered.')
-    expect(LOAD_FAILED).toBe('This page could not read the recovery email registered on your server.')
-    expect(SAVE_FAILED).toBe('That change to the recovery email could not be saved.')
+    expect(LOST_HEADING).toBe('If you have lost your sign-in')
+    expect(LOST_LEDE).toBe(
+      'Your recovery code gets you back in. Type it here with a new name and a new authenticator. ' +
+        'Every earlier sign-in is signed out, and your phones and clinicians stay as they are.',
+    )
+    expect(CODE_STAYS_HERE).toBe('The code stays on this page. Only a proof made with it is sent.')
+    expect(CODE_IS_THE_ONLY_WAY).toBe(
+      'Getting back in this way needs your recovery code. Without it, nothing on this page can make you a new sign-in.',
+    )
+    expect(SENDING_NEEDS_EMAIL).toBe('A notice needs this server to be set up to send email.')
+    expect(BACK_IN).toBe(
+      'You are signed in with your new sign-in, and every earlier sign-in is signed out. Unlock as usual to carry on.',
+    )
+    expect(LOAD_FAILED).toBe('This page could not read the email registered on your server.')
+    expect(SAVE_FAILED).toBe('That change to the email could not be saved.')
   })
 
-  it('the link is one-time, and is sent only by a server with email: the server says so', () => {
+  it('a recovery sends the notice to the registered address, through a mailer that needs email: the server says so', () => {
     const SERVER = '../../../../server/src/main/kotlin/com/daymark/companion/'
-    const store = codeOf(`${SERVER}mail/OwnerAccountStore.kt`)
-    const routes = codeOf(`${SERVER}routes/RecoveryRoutes.kt`)
+    const routes = codeOf(`${SERVER}routes/OwnerRecoveryRoutes.kt`)
     const mailer = codeOf(`${SERVER}mail/Mailer.kt`)
-    // One-time: the confirmation flips to CONSUMED and an unused one expires.
-    expect(store).toContain("UPDATE reissue_confirm SET status='CONSUMED' WHERE token_hash=?")
-    expect(store).toContain('if (status != "PENDING" || now >= expiry) return ReissueConfirmOutcome.Gone')
-    // Taken from the address typed, and minted only when it matches the registered one.
-    expect(routes).toContain('accountStore.requestReissue(req.email.trim(), confirmTtlSeconds)')
-    expect(store).toContain('val registered = registeredEmail() ?: return null')
+    expect(routes).toContain('accountStore.registeredEmail()?.let { to ->')
+    expect(routes).toContain('MailMessage.SecurityNotice(to, MailMessage.SecurityEvent.SIGN_IN_RECOVERED)')
     // Sent through a mailer that sends nothing when the server has no outbound email.
     expect(mailer).toMatch(/if \(!enabled\) \{/)
-    // So the promise of a link stands beside the condition that keeps it true.
-    expect(LOST_TOKEN_LEDE).toMatch(/will be sent/)
-    expect(cardFor('solo', false).lostLede).toEqual([LOST_TOKEN_LEDE, SENDING_NEEDS_EMAIL])
+    // So the promise of a notice stands beside the condition that keeps it true.
+    expect(SUMMARY_UNREGISTERED).toMatch(/a notice is sent/)
+    const setup = cardFor('solo', true).setup
+    expect(setup.kind === 'register' && setup.note).toBe(SENDING_NEEDS_EMAIL)
+  })
+
+  it('the emailed reset is gone from the server: nothing mails a link, and the old routes are not mounted', () => {
+    const SERVER = '../../../../server/src/main/kotlin/com/daymark/companion/'
+    const root = fileURLToPath(new URL(SERVER, import.meta.url))
+    const all = (readdirSync(root, { recursive: true }) as string[]).filter((f) => f.endsWith('.kt'))
+    const RETIRED = /MailMessage\.AccessRecovery|"\/v1\/recovery\/(request|confirm)"/
+    // Control: the detector sees the old shapes.
+    expect('mailer.send(MailMessage.AccessRecovery(to, link))').toMatch(RETIRED)
+    expect('post("/v1/recovery/confirm") {').toMatch(RETIRED)
+    expect(all.filter((f) => RETIRED.test(codeOf(`${SERVER}${f}`)))).toEqual([])
+    // And the directory walk found the server, so the empty answer means something.
+    expect(all).toContain('routes/OwnerRecoveryRoutes.kt')
   })
 
   it('on a solo server nothing but recovery mail reaches the address: every other owner mail comes from clinician routes', () => {
@@ -128,25 +156,25 @@ describe('the words, as the copy pass settled them and as the server makes them 
     const notifier = codeOf(`${SERVER}mail/OwnerNotifier.kt`)
     expect(notifier).toContain('mailer.send(MailMessage.ReviewNotification(email, portalUrl, event))')
     // Every file that notifies the owner, found by walking the server's source rather than listed:
-    // the two clinician route files a solo shape switches off. Recovery itself sends the link and
-    // the notice that the link re-issued a token, and nothing else.
+    // the two clinician route files a solo shape switches off. Recovery itself sends the notice
+    // that someone got back in, and nothing else.
     const root = fileURLToPath(new URL(SERVER, import.meta.url))
     const notifying = (readdirSync(root, { recursive: true }) as string[])
       .filter((f) => f.endsWith('.kt') && /notifier\.notify\(/.test(codeOf(`${SERVER}${f}`)))
       .sort()
     expect(notifying).toEqual(['routes/RelationRoutes.kt', 'routes/TherapistAuthRoutes.kt'])
-    const routes = codeOf(`${SERVER}routes/RecoveryRoutes.kt`)
-    expect(routes).toContain('MailMessage.AccessRecovery(')
-    expect(routes).toContain('MailMessage.SecurityNotice(addr, MailMessage.SecurityEvent.TOKEN_REISSUED)')
-    expect(routes.match(/mailer\.send\(/g)).toHaveLength(2)
+    const routes = codeOf(`${SERVER}routes/OwnerRecoveryRoutes.kt`)
+    expect(routes.match(/mailer\.send\(/g)).toHaveLength(1)
   })
 
   it('the lines they replace are gone from the card', () => {
-    const RETIRED = /If you registered a notification email|registered for notifications|Lost your owner access token\?/
+    const RETIRED =
+      /If you registered a notification email|registered for notifications|Lost your owner access token\?|one-time link|recovery link|re-issue/i
     expect(
       'Lost your owner access token? If you registered a notification email, you can request a new one here.',
     ).toMatch(RETIRED)
     expect("error = 'Enter the email you registered for notifications.'").toMatch(RETIRED)
+    expect("'Confirm and re-issue'").toMatch(RETIRED)
     expect(CARD).not.toMatch(RETIRED)
     expect(Object.values(copy).filter((v) => typeof v === 'string' && RETIRED.test(v))).toEqual([])
   })
@@ -166,13 +194,13 @@ describe('the card, state by state', () => {
   it('solo, with a token: the field, and nothing to remove yet', () => {
     const view = cardFor('solo', true)
     expect(view.summary).toBe(SUMMARY_UNREGISTERED)
-    expect(view.setup).toEqual({ kind: 'register', lede: REGISTER_LEDE, registered: null, canRemove: false })
+    expect(view.setup).toEqual({ kind: 'register', lede: REGISTER_LEDE, note: SENDING_NEEDS_EMAIL, registered: null, canRemove: false })
   })
 
   it('solo, with an address registered: the other lead, the address, and a way to remove it', () => {
     const view = cardFor('solo', true, EMAIL)
     expect(view.summary).toBe(SUMMARY_REGISTERED)
-    expect(view.setup).toEqual({ kind: 'register', lede: REGISTER_LEDE, registered: EMAIL, canRemove: true })
+    expect(view.setup).toEqual({ kind: 'register', lede: REGISTER_LEDE, note: SENDING_NEEDS_EMAIL, registered: EMAIL, canRemove: true })
   })
 
   it('paired, practice and no published shape: no lead, and a pointer to the owner console', () => {
@@ -189,12 +217,13 @@ describe('the card, state by state', () => {
     }
   })
 
-  it('every state keeps the lost-token part, with its condition', () => {
+  it('every state keeps the lost-sign-in part, with its limit, and sends the owner on to where they unlock', () => {
     for (const published of ['solo', 'paired', 'practice', null] as const) {
       for (const connected of [false, true]) {
         const view = cardFor(published, connected)
-        expect(view.lostHeading).toBe(LOST_TOKEN_HEADING)
-        expect(view.lostLede).toEqual([LOST_TOKEN_LEDE, SENDING_NEEDS_EMAIL])
+        expect(view.lostHeading).toBe(LOST_HEADING)
+        expect(view.lostLede).toEqual([LOST_LEDE, CODE_IS_THE_ONLY_WAY])
+        expect(view.afterRecovery.route).toBe(published === 'solo' ? 'sync' : 'owner')
       }
     }
   })
@@ -307,8 +336,26 @@ describe('RecoverAccess.svelte renders the view, and App.svelte hands it what it
     expect(markup).not.toMatch(/owner console/i)
   })
 
-  it('names the address the lost-token flow takes when it is left empty', () => {
-    expect(CARD).toContain('error = EMAIL_MISSING')
+  it('has no server address field: the proof is bound to this page, and so is the session it starts', () => {
+    const markup = CARD.replace(/<script[\s\S]*?<\/script>/, ' ')
+    expect('<input type="url" bind:value={serverUrl} />').toMatch(/type="url"|serverUrl/) // the detector detects
+    expect(markup).not.toMatch(/type="url"|serverUrl/)
+    expect(CARD).toContain('address: location.origin')
+  })
+
+  it('checks the code group by group before anything is fetched, and zeroes the new key once back in', () => {
+    const fn = CARD.slice(CARD.indexOf('async function getBackIn'), CARD.indexOf('</script>'))
+    const check = fn.indexOf('firstGroupProblem(groups)')
+    const call = fn.indexOf('recoverSignIn(')
+    expect(check).toBeGreaterThan(-1)
+    expect(call).toBeGreaterThan(check)
+    expect(fn).toMatch(/seed\.fill\(0\)\s*seed = null\s*groups = emptyGroups\(\)/)
+  })
+
+  it('says what leaves the page beside the boxes the code is typed into', () => {
+    const boxes = CARD.indexOf('<GroupEntry')
+    expect(boxes).toBeGreaterThan(-1)
+    expect(CARD.slice(boxes, CARD.indexOf('<label', boxes))).toContain('{CODE_STAYS_HERE}')
   })
 
   it('App.svelte gives the card the owner-console rule, the token a sync pull proved, and a way to open the other cards', () => {

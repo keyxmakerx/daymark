@@ -394,17 +394,17 @@ owner's pairing identity. The properties the rest of this document relies on:
   the token reaches except those SYNC_PROTOCOL.md §2.2 lists, which answer it 403 from one list:
   - managing phones, so a phone cannot add one, and revoking one leaves nothing behind that it made;
   - making a practice, which is the operator's act;
-  - how the owner recovers. The recovery routes take no credential, so a phone that could set the
-    notification address could have the console's token re-issued to whoever holds its key, and
-    reading the address would hand them the owner's email. A phone that could write a key document
-    could leave the passphrase and the recovery code opening nothing the server serves, and no route
-    undoes that.
+  - where the owner's notices go, and the owner's key. Reading the notification address would hand
+    whoever holds the phone's key the owner's email, and setting it would send the notice of a
+    recovery (§5.9) somewhere the owner never reads. A phone that could write a key document could
+    leave the passphrase and the recovery code opening nothing the server serves, and no route undoes
+    that.
 
   A route whose name the gate cannot read is refused to a phone, never opened to it.
 - **Revoking holds at once.** Every signed request reads its key and its revocation from the database,
   when it arrives and again just before the handler, with no verdict cached, so a phone revoked while
-  its body is on the way stores nothing. Re-issuing the token revokes every phone in the same
-  transaction.
+  its body is on the way stores nothing. Changing `DAYMARK_AUTH_TOKEN` while the owner has no
+  account revokes every phone at the next start, in the same transaction as the new digest.
 - **No answer tells one key from another.** Every refusal of a signature is the same 401, counted
   toward the lockout as a bad token is, and nothing that depends on the key is answered before the
   whole body has arrived, so a withheld body gets no answer whatever key it names.
@@ -422,9 +422,32 @@ owner's pairing identity. The properties the rest of this document relies on:
   refused. The account takes the owner's existing id, so stored copies and paired phones stay theirs.
   It writes `owner.account_created` to the owner's log.
 - **The token then signs nobody in.** A token request answers exactly as a wrong token does, so
-  nothing says the token was once right. Email recovery answers 404, since it would hand out a new
-  token (#325 is recovery by key). Changing `DAYMARK_AUTH_TOKEN` and restarting moves only the
+  nothing says the token was once right. Changing `DAYMARK_AUTH_TOKEN` and restarting moves only the
   stored digest: it disconnects no phone.
+- **The account records the owner's recovery key.** `POST /v1/owner/account` also takes the public
+  half of an Ed25519 key derived from the master (subkey 5 of `dmsync01`,
+  `companion/web/src/lib/owner/recoveryKey.ts`), which the console holds unlocked when it makes the
+  account; an account is never made without one. The key is insert-only: no route replaces it.
+- **A lost sign-in comes back by proving that key, never by email** (#325, `routes/OwnerRecoveryRoutes.kt`).
+  `POST /v1/owner/recovery/challenge`, unauthenticated, hands out a random challenge, good once for
+  ten minutes, with the owner's wrapped key carrying its recovery-code slots only. The passphrase
+  slot is never served here: a recovery code carries about 143 bits, so its slot can be handed to
+  anyone, and a passphrase slot would let anyone test guesses offline. The browser opens the slot
+  with the recovery code, derives the key and signs `daymark-owner-recovery-v1`, the owner's id, the
+  page's own origin and the challenge, one per line. `POST /v1/owner/recovery` takes the signature
+  with a new name, authenticator seed and six digits. Six digits that do not match change nothing and
+  spend nothing; otherwise the challenge is spent before the signature is checked, so a replay and a
+  wrong signature are the same 401.
+- **The address in the proof is `DAYMARK_PUBLIC_BASE_URL`**, never the request's `Host`, so a
+  challenge relayed from another server is signed for the wrong address and refused there. A server
+  without it answers both routes 503.
+- **A recovery replaces the sign-in and nothing else.** It ends every owner session, writes one
+  `owner.recovered` row to the owner's log and one log line, neither with a secret in it, and sends
+  the fixed "someone got back in with your recovery code" notice to the registered address, if there
+  is one. Phones, CLI credentials, the key document and every relationship stay as they were. Each
+  route is limited per source to 10 attempts, refilling one every six seconds.
+- **Without the recovery code there is no way back in from the browser.** The passphrase cannot
+  prove anything here, because its slot is never served unauthenticated.
 - **Sign-in** is the same TOTP path as the administrator's and the clinician's (§5.2): one replay
   window per step, every refusal the same sentence, and one audit row per lockout, on arming.
 - **The session** is the cookie `daymark_owner`, `HttpOnly; SameSite=Strict`, with §5.4's lifetimes;
@@ -502,34 +525,23 @@ stack trace; the server's own log line for an unhandled error does not yet meet 
   the clinician writes may use a quarter and what the owner writes the rest (§3 T4), counting only
   bytes still held. All are configurable ([COMPANION_DEPLOYMENT.md](COMPANION_DEPLOYMENT.md) §5).
 
-### Owner notifications and server-access recovery
+### Owner notifications
 
-- There are no owner accounts or passwords, and the server can never reset a passphrase or PIN.
+- The server can never reset a passphrase or PIN.
 - **The notification email is stored in plaintext**, because the server must read it to send. A leak
   shows that an owner exists at that address, not any content.
 - The address is set through `PUT /v1/owner/notifications`, which every shape serves: in the owner
   console's Notifications tab, or, on a solo server, which withholds that console, on the owner
-  page's "Recover access" card, with the token a sync pull proved on that page. Setting it keeps the
+  page's "Recover access" card, with the credential a sync pull proved on that page. Setting it keeps the
   chosen notifications, and both fields say it is stored in plaintext.
 - **The owner bearer token is stored as a BLAKE2b digest** in `owner-account.db`, never as the token.
   (`DAYMARK_AUTH_TOKEN` itself remains the operator's secret file.) Once the owner has an account
   (§5.9), the token signs nobody in. The token alone can approve a
   pairing and so enrol a clinician, which is why it may not sit in the clear. Content routes also
   demand the relationship's inbox token, whose digest is all the server holds.
-- **Access comes back by proving the owner's own key, never by email** (#208): a key derived from
-  the passphrase or recovery code signs a fresh challenge, so control of the registered mailbox
-  opens nothing. Not built: #325. Until it is, the emailed re-issue below is how access comes back.
-- `POST /v1/recovery/request` is unauthenticated by necessity. It is limited per address (3 an hour),
-  always answers 202, and sends mail from a background task, so a matching and a non-matching address
-  take the same time. Addresses compare case-insensitively.
-- The recovery link is built only from `DAYMARK_PUBLIC_BASE_URL` (or `DAYMARK_WEBAUTHN_ORIGINS`) and
-  never from the request's `Host`; with neither set, the request is accepted and nothing is sent. The
-  link points at `/recover#t=…`, which no route serves yet (#173).
-- `POST /v1/recovery/confirm` replaces the token at once, with no overlap, and returns the new one in
-  the response — once, never by mail. In the same transaction it revokes every paired phone (§5.8),
-  and each gets a `device.revoked` row in the owner's log. A "your access token was re-issued" notice then goes to the
-  registered address. The confirm writes no audit entry of its own and no log line, and has no rate limit
-  (#163).
+- **No email opens anything.** Access comes back by proving the owner's own key (§5.9, #208), so
+  control of the registered mailbox opens nothing. The address receives notifications and the notice
+  that someone got back in, and nothing sends it a link that changes a credential.
 - An email when a lockout starts: not built (#190).
 
 ## 7. Reverse proxy and trusted proxies
@@ -604,7 +616,7 @@ stack trace; the server's own log line for an unhandled error does not yet meet 
   written down somewhere it cannot reach. Signed clinician attestations were weighed and not adopted
   (#217). The phone keeping its own copy of the head: #182.
 - **Missing events:** a refused read of an expired or withdrawn share (`SHARE_DENIED` is declared and
-  never written: #164); the token re-issue, invitations minted or expired, reads of the log itself,
+  never written: #164); a token change at start, invitations minted or expired, reads of the log itself,
   bulk reads, and changes to logging policy (#187).
 
 ## 9a. Closing a credential without deleting one

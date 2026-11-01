@@ -66,7 +66,8 @@ Every per-source control uses `ApplicationCall.clientAddress()`:
 | Anonymous "I didn't expect this" reports | 30 per minute | address | memory | `therapistAuthRoutes` (`reportFloodGuard`) |
 | Clinician session requests (relationship, key and ending routes) | 120 per minute | address | memory | `relationRoutes`, `therapistKeyRoutes`, `relationshipEndingRoutes` |
 | Practice console requests | 120 per minute | address | memory | `orgRoutes` |
-| Recovery requests, `POST /v1/recovery/request` | `DAYMARK_REISSUE_MAX_PER_HOUR`, 3 per hour | address | memory | `OwnerAccountStore.allowReissueAttempt` |
+| Recovery challenges and attempts, `POST /v1/owner/recovery/challenge` and `POST /v1/owner/recovery` | a burst of 10 each, then one per 6 s | address | memory | `ownerRecoveryRoutes` |
+| A recovery challenge | good once, for 10 minutes | challenge | `owner-account.db` | `OwnerSignIn.spendRecoveryChallenge` |
 | The audit entry's `sourceIp` (only if enabled) | — | address | `audit.db` | — |
 
 Behind a reverse proxy, the TCP peer is **the proxy, for every request on the internet**.
@@ -214,8 +215,8 @@ the code has changed.
 | ERROR | `…mail.Mailer` | `refusing to send: content guard rejected message (kind={}): {}` (`Mailer.send`) | A kind and the guard's own fixed message; never the body, subject or recipient |
 | WARN | `…mail.Mailer` | `mail send failed (kind={}): {}` (`Mailer.send`) | A kind and an exception class name |
 | WARN | `…mail.OwnerNotifier` | `owner notification failed (event={}): {}` (`OwnerNotifier.notify`) | An event name and an exception class name |
-| WARN | `…routes.RecoveryRoutes` | `recovery email failed to send: {}`, `token-reissued receipt failed to send: {}` (`recoveryRoutes`) | An exception class name |
-| WARN | `…routes.RecoveryRoutes` | `access-token recovery was requested but no public base URL is configured…` (`recoveryRoutes`) | Nothing — but it fires only when the address matched (#160) |
+| INFO | `…companion.security` | `the owner proved their recovery key and made a new sign-in; every earlier owner session is ended` (`ownerRecoveryRoutes`) | Nothing: a fixed sentence |
+| WARN | `…companion.security` | `recovery notice failed to send: {}` (`ownerRecoveryRoutes`) | An exception class name |
 | WARN | `…companion.audit` | `audit log append failed` **with a stack trace** (`auditSafely` in the relationship, auth, key, ending, pairing and device routes) | Fixed messages and column names today; a stack trace all the same |
 | WARN | `…companion.audit` | `org audit append failed` with a stack trace (`orgRoutes`) | The same |
 | WARN | `…companion.routes` | `blob store I/O error: {}` (`failBlob` in `SyncRoutes.kt`, on a full disk) | **A file path containing the lineage id** (#160) |
@@ -291,7 +292,7 @@ turning SMTP on widens that deliberately.
 
 ### 3.5 What mail is sent, and to whom
 
-Four kinds exist, and **there is no API to supply a subject or a body** — the sealed `MailMessage`
+Three kinds exist, and **there is no API to supply a subject or a body** — the sealed `MailMessage`
 hierarchy has no free-text field, and `MailContentGuard.assertClean` re-checks every rendered message
 before a transport sees it.
 
@@ -299,18 +300,16 @@ before a transport sees it.
 |---|---|---|---|
 | `TherapistInvite` | An address the **owner** gives when minting an invitation | Fixed template, the invitation link, its expiry, an optional display name | `therapistAuthRoutes`, `POST /v1/invite` |
 | `ReviewNotification` | The owner's **registered** address, only for the kinds they opted into. One more kind, a clinician ending their access, is decided (#216); not built: #329 | Fixed template and the console's address; the kind does not change the body, so nothing reveals what arrived | `OwnerNotifier.notify` |
-| `AccessRecovery` | The **registered** address — never the requester's | Fixed template, a single-use confirmation link, its expiry | `recoveryRoutes` |
-| `SecurityNotice(TOKEN_REISSUED)` | The registered address, **always** — not subject to the opt-in, as a password-reset receipt is not | Fixed template, no link | `recoveryRoutes` |
+| `SecurityNotice(SIGN_IN_RECOVERED)` | The registered address, **always** — not subject to the opt-in, as a password-reset receipt is not | Fixed template, no link | `ownerRecoveryRoutes` |
 
-The decided design removes the emailed access recovery that `AccessRecovery` and `TOKEN_REISSUED`
-serve: access comes back by proving the owner's own key, never by email (#208). Not built: #325.
+No mail carries a link that changes a credential: access comes back by proving the owner's own key,
+never by email (#208, COMPANION_SECURITY.md §5.9).
 
-**Both secret-bearing links put the secret in the URL fragment** — `…/portal/invite#id=…&s=…` and
-`…/recover#t=…` — so it is never sent to a server in a request line, never reaches a proxy's access log,
-and never appears in a `Referer`. It is still plaintext in an email at rest at your mail provider:
-treat an invitation mailbox accordingly. `/portal/invite` redirects to `/therapist` and the browser
-carries the fragment along; no route serves `/recover` yet, so the recovery link does not open a page
-(#173).
+**The one secret-bearing link puts the secret in the URL fragment** — `…/portal/invite#id=…&s=…` — so
+it is never sent to a server in a request line, never reaches a proxy's access log, and never appears
+in a `Referer`. It is still plaintext in an email at rest at your mail provider: treat an invitation
+mailbox accordingly. `/portal/invite` redirects to `/therapist` and the browser carries the fragment
+along.
 
 The guard scans the rendered subject and body for record-like words (`MailContentGuard`'s sentinel
 list) with the link cut out first, so a server hosted at, say, `mood.example.org`, or a random token
@@ -439,15 +438,15 @@ docker system df -v | grep daymark-companion_blobs
 | `blob store I/O error: disk write failed: …` | The snapshot store could not write. **The message can hold a lineage id** | Free space or permissions; redact before sharing. The relationship store's equivalent logs nothing (#161) |
 | `key document store I/O error: …` | The key params or the wrapped key could not be read or written; the owner's devices cannot open or change their key | Free space, the volume's ownership (UID 65532), a read-only mount |
 | `refusing to send: content guard rejected message` | Something tried to put non-template text into an email; nothing was sent | Investigate as a bug or an attack |
-| `mail send failed (kind=…)` | The one outbound path is broken; the owner is not hearing about invitations, reviews or token re-issues | §3.6 |
+| `mail send failed (kind=…)` | The one outbound path is broken; the owner is not hearing about invitations, reviews or a recovery | §3.6 |
 | `audit log append failed`, `org audit append failed` | Access is still served but no longer recorded. The owner's log is now incomplete, and nothing in the chain will ever show it | The most urgent storage error: check the data directory. The append never blocks a request (`auditSafely`), which is right, and is why only you see this |
 | `Web directory '…' not found` | The consoles will 404 | Check `DAYMARK_WEB_DIR` |
 | `DAYMARK_AUTH_TOKEN is not set` | The sync API and every owner route answer 503 | Create the secret (COMPANION_DEPLOYMENT.md §5.2) |
 | `relationship sweep: … N could not be removed and are retried next sweep` (WARN) | Copies of shared items that have ended are still on the volume; reads of them are refused, but the bytes are there | Check the volume's ownership (UID 65532), a read-only mount, or a stray directory in `rel/`; the sweep retries every hour |
 | `housekeeping job failed` or `housekeeping pass failed` | A scheduled sweep threw; ended copies may be accumulating | Look for the storage error around it; the next pass runs within the hour |
 
-Also watch for something that logs nothing: a token re-issue by email recovery leaves no log line and
-no audit entry, so on a server without SMTP it is completely silent (#163).
+A recovery by key always leaves a log line and an `owner.recovered` row in the owner's log, with SMTP
+or without it.
 
 ### 6.4 After any change — the checklist
 

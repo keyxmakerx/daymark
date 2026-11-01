@@ -239,7 +239,7 @@ read from a file named by `NAME_FILE`, which wins.
 | `DAYMARK_AUTH_TOKEN` (`_FILE`) | unset | The owner's bearer token, until the owner makes their own sign-in, after which it signs nobody in (COMPANION_SECURITY.md §5.9). Unset: the sync API, owner routes, recovery and the clinician portal all answer 503 |
 | `DAYMARK_SETUP_MODE` | unset | `solo`, `paired` or `practice`, in any case: the shape, and so which routes, pages and stores the server serves (§0). Unset or blank, the server assumes one from `DAYMARK_THERAPIST_AUTH` and logs which. Any other value stops the server at start (§5.3) |
 | `DAYMARK_THERAPIST_AUTH` | off | The switch `DAYMARK_SETUP_MODE` replaces; `1` or `true` is on, anything else off. With no mode it decides the shape: on is `practice`, off is `solo`. Beside a mode, leave it out or set it to agree (§5.3) |
-| `DAYMARK_PUBLIC_BASE_URL` | first `DAYMARK_WEBAUTHN_ORIGINS` entry | The external origin every link the server hands out is built on: an absolute `http` or `https` address with a host and no user name, query or fragment. Required in the `paired` and `practice` shapes and while SMTP is on (§5.3). A phone pairs only while it is `https` (§3.4) |
+| `DAYMARK_PUBLIC_BASE_URL` | first `DAYMARK_WEBAUTHN_ORIGINS` entry | The external origin every link the server hands out is built on: an absolute `http` or `https` address with a host and no user name, query or fragment. Required in the `paired` and `practice` shapes and while SMTP is on (§5.3). A phone pairs only while it is `https` (§3.4). The owner can get back in with the recovery code only while it is set, because the proof names it (COMPANION_SECURITY.md §5.9) |
 | `DAYMARK_WEBAUTHN_RP_ID` | unset | The passkey relying-party id. Passkeys sign people in on an `https` address with a hostname, and never unlock keys (#205); not built: #326 (COMPANION_SECURITY.md §5.1) |
 | `DAYMARK_WEBAUTHN_ORIGINS` | unset | Comma-separated; also the fallback for `DAYMARK_PUBLIC_BASE_URL` |
 | `DAYMARK_TRUSTED_PROXIES` | empty: trust nothing | §4.0 |
@@ -258,8 +258,6 @@ read from a file named by `NAME_FILE`, which wins.
 | `DAYMARK_COOKIE_INSECURE` | off | Plain-HTTP testing only: drops `Secure` from the session cookie. Refused at start with an `https` public address (§5.3) |
 | `DAYMARK_ACCESS_LOG_RETENTION_DAYS` | `90` | Audit-log retention (COMPANION_SECURITY.md §9) |
 | `DAYMARK_ACCESS_LOG_SOURCE_IP` | off | Records the client address in audit entries |
-| `DAYMARK_REISSUE_MAX_PER_HOUR` | `3` | Recovery requests per address per hour |
-| `DAYMARK_REISSUE_CONFIRM_TTL_SECONDS` | `3600` | Lifetime of a recovery link |
 | `DAYMARK_SMTP_HOST` | unset | The one switch for outbound mail (§8) |
 | `DAYMARK_SMTP_PORT` | `587` | 587 for STARTTLS, 465 for implicit TLS |
 | `DAYMARK_SMTP_TLS` | `starttls` | `starttls` or `implicit`; `none` and anything unknown stop the server at start |

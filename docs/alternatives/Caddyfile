@@ -187,11 +187,10 @@
 				request>client_ip   delete
 				request>remote_port delete
 
-				# Regression guard. Secrets ride in the URL FRAGMENT today
-				# (TherapistAuthRoutes.kt:258 -> /portal/invite#id=..&s=..,
-				#  RecoveryRoutes.kt:169    -> /recover#t=..), which browsers never
-				# transmit. Strip them from the query too so a future refactor from
-				# '#' to '?' cannot leak single-use recovery tokens with no alarm.
+				# Regression guard. The invitation secret rides in the URL FRAGMENT
+				# (TherapistAuthRoutes.kt -> /portal/invite#id=..&s=..), which browsers
+				# never transmit. Strip these names from the query too so a future
+				# refactor from '#' to '?' cannot leak a single-use secret with no alarm.
 				request>uri query {
 					delete t
 					delete s
