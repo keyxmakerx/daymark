@@ -700,88 +700,103 @@ class AuthStore(
         }
     }
 
-    // ---- TOTP --------------------------------------------------------------------
+    // ---- Staff accounts (#314) ---------------------------------------------------
+
+    /*
+     * ONE ACCOUNT PER PERSON, AND RELATIONSHIPS ATTACH TO IT.
+     *
+     * An account is a sign-in name and its authenticator seed. It reaches a relationship only while
+     * that relationship's newest row in `account_attachments` names it, the account is not closed and
+     * the relationship has not ended. Every session-cookie route asks [reaches] (or [holds], for the
+     * leave route) on every request, so an attachment that moves, an account that closes and a
+     * relationship that ends all take effect on the next request, with no session to cut.
+     *
+     * The account adds no way to read. Reading still needs the relationship's own keys, which live
+     * wrapped in the clinician's browser, and its inbox token (docs/COMPANION_ACCESS_CONTROL.md).
+     */
 
     enum class EnrollStatus { OK, NO_TICKET, ALREADY_ENROLLED }
     data class EnrollResult(val status: EnrollStatus, val relRef: String? = null)
 
     /**
-     * Enrol a TOTP credential, gated on a valid single-use enrollment [ticket] minted at invite
-     * redemption. The relRef is derived from the TICKET (not trusted from the caller); the ticket
-     * is consumed and its invite driven to CONSUMED on success. Insert-only: if a credential
-     * already exists for the credentialId OR the ticket's relRef, the enroll is REJECTED
-     * (no silent INSERT OR REPLACE that could overwrite a live credential). Fail-closed.
+     * Make the account [credentialId] with the TOTP seed [secretB64], and attach the relationship its
+     * enrolment [ticket] names: the invitation that creates a relationship also creates the invitee's
+     * account when they have none here. The relRef comes from the TICKET, never from the caller; the
+     * ticket is consumed and its invite driven to CONSUMED on success.
      *
-     * @return [EnrollResult] with the derived relRef on success, else the failure reason.
+     * Insert-only: an account that already exists is never overwritten, and a relationship that has
+     * EVER been attached refuses a second invitation-made attachment ([attachByInvitation] shares
+     * the rule), so a leftover invitation link cannot attach a relationship to a second account.
+     * Both refusals are [EnrollStatus.ALREADY_ENROLLED] and leave the ticket where it was.
      */
     fun enrollTotp(ticket: String, credentialId: String, secretB64: String): EnrollResult = synchronized(lock) {
+        val spent = liveTicketLocked(ticket) ?: return EnrollResult(EnrollStatus.NO_TICKET)
+        if (accountExistsLocked(credentialId) || everAttachedLocked(spent.relRef)) {
+            return EnrollResult(EnrollStatus.ALREADY_ENROLLED)
+        }
         val now = clock()
-        // 1. Consume the ticket (single-use, unexpired). Derive relRef + invite from it.
+        conn.prepareStatement(
+            "INSERT INTO accounts(account_id, secret_b64, fail_count, locked_until, last_used_step, created_at) VALUES (?,?,0,0,0,?)",
+        ).use { ps ->
+            ps.setString(1, credentialId); ps.setString(2, secretB64); ps.setLong(3, now)
+            ps.executeUpdate()
+        }
+        insertAttachmentLocked(spent.relRef, credentialId, ATTACHED_BY_INVITATION)
+        deleteEnrollTicket(spent.ticketHash)
+        setInviteStatus(spent.inviteId, "CONSUMED")
+        EnrollResult(EnrollStatus.OK, spent.relRef)
+    }
+
+    /**
+     * Attach the relationship [ticket] names to the account [accountId] that already exists: a
+     * clinician with an account accepting a second patient's invitation while signed in. Same ticket
+     * rules and the same insert-only refusal as [enrollTotp]; no seed is written. A closed account
+     * attaches nothing.
+     */
+    fun attachByInvitation(ticket: String, accountId: String): EnrollResult = synchronized(lock) {
+        if (!accountExistsLocked(accountId) || closedLocked(accountId)) return EnrollResult(EnrollStatus.NO_TICKET)
+        val spent = liveTicketLocked(ticket) ?: return EnrollResult(EnrollStatus.NO_TICKET)
+        if (everAttachedLocked(spent.relRef)) return EnrollResult(EnrollStatus.ALREADY_ENROLLED)
+        insertAttachmentLocked(spent.relRef, accountId, ATTACHED_BY_INVITATION)
+        deleteEnrollTicket(spent.ticketHash)
+        setInviteStatus(spent.inviteId, "CONSUMED")
+        EnrollResult(EnrollStatus.OK, spent.relRef)
+    }
+
+    private data class LiveTicket(val ticketHash: String, val inviteId: String, val relRef: String)
+
+    /**
+     * The enrolment ticket [ticket], when it is unexpired AND the invite it came from is still
+     * REDEEMING; else null, with a dead ticket deleted on the way out so it cannot be retried.
+     *
+     * THE TICKET IS NOT ENOUGH — the invite must still be live. A ticket outlived every way an invite
+     * can die until this checked: an attacker who redeemed, an owner who reported, and the invite's
+     * own TTL lapsing while the report answered GONE without killing tickets. This is the single
+     * place a ticket is spent, so a future way to retire an invite cannot reopen that by forgetting
+     * to sweep (InviteBurnRuleTest).
+     */
+    private fun liveTicketLocked(ticket: String): LiveTicket? {
+        val now = clock()
         val ticketHash = Secrets.tokenHash(ticket)
-        val (inviteId, relRef) = conn.prepareStatement(
+        val (inviteId, relRef, expiry) = conn.prepareStatement(
             "SELECT invite_id, rel_ref, expiry FROM enroll_tickets WHERE ticket_hash=?",
         ).use { ps ->
             ps.setString(1, ticketHash)
-            ps.executeQuery().use { rs ->
-                if (!rs.next()) return EnrollResult(EnrollStatus.NO_TICKET)
-                val inv = rs.getString(1)
-                val rel = rs.getString(2)
-                val expiry = rs.getLong(3)
-                if (now >= expiry) {
-                    // Expired ticket: delete and fail closed.
-                    deleteEnrollTicket(ticketHash)
-                    return EnrollResult(EnrollStatus.NO_TICKET)
-                }
-                inv to rel
-            }
+            ps.executeQuery().use { rs -> if (rs.next()) Triple(rs.getString(1), rs.getString(2), rs.getLong(3)) else null }
+        } ?: return null
+        if (now >= expiry) {
+            deleteEnrollTicket(ticketHash)
+            return null
         }
-        /*
-         * 1b. THE TICKET IS NOT ENOUGH — the invite it came from must still be live.
-         *
-         * Found by the adversarial review of the report/burn change, and it is the reason the report
-         * route was not the control it claimed to be. A ticket carries its own 10-minute expiry and
-         * NOTHING here used to consult the invite, so a ticket outlived every way an invite can die:
-         *
-         *   attacker redeems (invite -> REDEEMING, ticket minted) -> owner reports it -> the report
-         *   answers GONE and the owner believes the invitation is dead -> the attacker enrols anyway,
-         *   for up to ten more minutes, and becomes the therapist.
-         *
-         * `killInviteLocked` does delete tickets, so the reported path was covered. The path that was
-         * NOT is the one where the invite's own TTL had already lapsed when the report arrived: both
-         * report functions flip the row to EXPIRED and return GONE *without* killing tickets, which
-         * is precisely the window an attacker mid-enrolment is sitting in.
-         *
-         * Checking here rather than patching each kill path is deliberate: this is the single place
-         * a ticket is spent, so a future third way to retire an invite cannot reopen the hole by
-         * forgetting to sweep. Fail closed, and consume the ticket on the way out so a dead invite's
-         * ticket cannot be retried.
-         */
         val inviteLive = conn.prepareStatement("SELECT status FROM invites WHERE invite_id=?").use { ps ->
             ps.setString(1, inviteId)
             ps.executeQuery().use { rs -> rs.next() && rs.getString(1) == "REDEEMING" }
         }
         if (!inviteLive) {
             deleteEnrollTicket(ticketHash)
-            return EnrollResult(EnrollStatus.NO_TICKET)
+            return null
         }
-        // 2. Insert-only: reject if a credential already exists for this credentialId or relRef.
-        val exists = conn.prepareStatement(
-            "SELECT 1 FROM totp WHERE credential_id=? OR rel_ref=? LIMIT 1",
-        ).use { ps ->
-            ps.setString(1, credentialId); ps.setString(2, relRef)
-            ps.executeQuery().use { rs -> rs.next() }
-        }
-        if (exists) return EnrollResult(EnrollStatus.ALREADY_ENROLLED)
-        // 3. Insert the credential, consume the ticket, drive the invite to CONSUMED — atomically.
-        conn.prepareStatement(
-            "INSERT INTO totp(credential_id, rel_ref, secret_b64, fail_count, locked_until, created_at) VALUES (?,?,?,0,0,?)",
-        ).use { ps ->
-            ps.setString(1, credentialId); ps.setString(2, relRef); ps.setString(3, secretB64); ps.setLong(4, now)
-            ps.executeUpdate()
-        }
-        deleteEnrollTicket(ticketHash)
-        setInviteStatus(inviteId, "CONSUMED")
-        return EnrollResult(EnrollStatus.OK, relRef)
+        return LiveTicket(ticketHash, inviteId, relRef)
     }
 
     private fun deleteEnrollTicket(ticketHash: String) {
@@ -790,14 +805,39 @@ class AuthStore(
         }
     }
 
-    data class TotpRecord(val relRef: String, val secretB64: String, val failCount: Int, val lockedUntil: Long)
+    /**
+     * Make an account with no relationship, for a member of staff joining a practice through its
+     * staff invitation (a receptionist has no patient invitation to make one). Insert-only: false
+     * when the name is taken, and the existing account is untouched. [step] is the TOTP step the
+     * person just proved, recorded as spent.
+     */
+    fun createAccount(accountId: String, secretB64: String, step: Long): Boolean = synchronized(lock) {
+        conn.prepareStatement(
+            "INSERT OR IGNORE INTO accounts(account_id, secret_b64, fail_count, locked_until, last_used_step, created_at) VALUES (?,?,0,0,?,?)",
+        ).use { ps ->
+            ps.setString(1, accountId); ps.setString(2, secretB64); ps.setLong(3, step); ps.setLong(4, clock())
+            ps.executeUpdate() > 0
+        }
+    }
 
-    fun getTotp(credentialId: String): TotpRecord? = synchronized(lock) {
-        conn.prepareStatement("SELECT rel_ref, secret_b64, fail_count, locked_until FROM totp WHERE credential_id=?").use { ps ->
-            ps.setString(1, credentialId)
+    /** Whether the sign-in name [accountId] is taken on this server. For the join route's refusal only. */
+    fun accountExists(accountId: String): Boolean = synchronized(lock) { accountExistsLocked(accountId) }
+
+    private fun accountExistsLocked(accountId: String): Boolean =
+        conn.prepareStatement("SELECT 1 FROM accounts WHERE account_id=?").use { ps ->
+            ps.setString(1, accountId)
+            ps.executeQuery().use { it.next() }
+        }
+
+    /** An account's authenticator state. [closed] accounts sign in nowhere. */
+    data class AccountRecord(val accountId: String, val secretB64: String, val failCount: Int, val lockedUntil: Long, val closed: Boolean)
+
+    fun account(accountId: String): AccountRecord? = synchronized(lock) {
+        conn.prepareStatement("SELECT secret_b64, fail_count, locked_until FROM accounts WHERE account_id=?").use { ps ->
+            ps.setString(1, accountId)
             ps.executeQuery().use { rs ->
                 if (!rs.next()) return null
-                TotpRecord(rs.getString(1), rs.getString(2), rs.getInt(3), rs.getLong(4))
+                AccountRecord(accountId, rs.getString(1), rs.getInt(2), rs.getLong(3), closedLocked(accountId))
             }
         }
     }
@@ -805,118 +845,342 @@ class AuthStore(
     /**
      * Atomically spend a TOTP step, returning false if it was already used.
      *
-     * The compare and the write happen in ONE statement under the same lock every other totp
-     * mutation takes. Doing it as read-then-write would leave a window in which two concurrent
-     * requests both observe the old `last_used_step` and both succeed — which is precisely the
-     * replay this is meant to stop, just narrower.
-     *
-     * `>` rather than `>=` is deliberate: the step 0 default means a freshly enrolled credential
-     * has spent nothing, and steps only ever increase.
+     * The compare and the write happen in ONE statement under the same lock every other account
+     * mutation takes, so two concurrent requests cannot both observe the old `last_used_step` and
+     * both succeed (RFC 6238 §5.2). `>` rather than `>=`: step 0 means nothing has been spent.
      */
-    fun consumeTotpStep(credentialId: String, step: Long): Boolean = synchronized(lock) {
+    fun consumeTotpStep(accountId: String, step: Long): Boolean = synchronized(lock) {
         conn.prepareStatement(
-            "UPDATE totp SET last_used_step=? WHERE credential_id=? AND last_used_step < ?",
+            "UPDATE accounts SET last_used_step=? WHERE account_id=? AND last_used_step < ?",
         ).use { ps ->
-            ps.setLong(1, step); ps.setString(2, credentialId); ps.setLong(3, step)
+            ps.setLong(1, step); ps.setString(2, accountId); ps.setLong(3, step)
             return ps.executeUpdate() > 0
         }
     }
 
-    fun recordTotpSuccess(credentialId: String) = synchronized(lock) {
-        conn.prepareStatement("UPDATE totp SET fail_count=0, locked_until=0 WHERE credential_id=?").use { ps ->
-            ps.setString(1, credentialId); ps.executeUpdate()
+    fun recordTotpSuccess(accountId: String) = synchronized(lock) {
+        conn.prepareStatement("UPDATE accounts SET fail_count=0, locked_until=0 WHERE account_id=?").use { ps ->
+            ps.setString(1, accountId); ps.executeUpdate()
         }
     }
 
-    /** Bump the fail count and apply capped backoff lockout. Returns the new locked_until. */
     /**
      * The store's opinion of now, for route code whose decisions must agree with what the store
-     * wrote. The totp lockout is armed off this clock ([recordTotpFailure]), so the route asking
-     * "is it still in force?" has to ask the same clock — under the default both are the wall
-     * clock, but a route on System.currentTimeMillis() while a test injects a clock here means
-     * two silently divergent opinions of the time, and an untestable locked path.
+     * wrote. The lockout is armed off this clock ([recordTotpFailure]), so the route asking "is it
+     * still in force?" has to ask the same clock.
      */
     fun nowMs(): Long = clock()
 
-    fun recordTotpFailure(credentialId: String, lockoutFails: Int, lockoutMs: Long): Long = synchronized(lock) {
+    /**
+     * Bump the fail count and arm the lockout once it crosses [lockoutFails]. Returns the new
+     * locked_until.
+     *
+     * Once a lockout has been served the counter starts again. Without that reset every failure
+     * after the first lockout immediately re-armed another one, and the account id is a typed
+     * sign-in name, so anyone who knows it could keep its holder locked out for free.
+     */
+    fun recordTotpFailure(accountId: String, lockoutFails: Int, lockoutMs: Long): Long = synchronized(lock) {
         val now = clock()
-        val rec = getTotp(credentialId) ?: return 0L
-        // Once a lockout has expired, the counter starts again. Without this reset the count only
-        // ever climbs, so every failure after the first lockout immediately re-armed another one —
-        // a single bad code per window locked the credential out permanently, and `credentialId`
-        // is a therapist-typed username, so anyone who knows it could keep them locked out for
-        // free. Serving a lockout must clear the debt that caused it.
+        val rec = account(accountId) ?: return 0L
         val priorFails = if (rec.lockedUntil in 1..now) 0 else rec.failCount
         val newFails = priorFails + 1
         val locked = if (newFails >= lockoutFails) now + lockoutMs else 0L
-        conn.prepareStatement("UPDATE totp SET fail_count=?, locked_until=? WHERE credential_id=?").use { ps ->
-            ps.setInt(1, newFails); ps.setLong(2, locked); ps.setString(3, credentialId); ps.executeUpdate()
+        conn.prepareStatement("UPDATE accounts SET fail_count=?, locked_until=? WHERE account_id=?").use { ps ->
+            ps.setInt(1, newFails); ps.setLong(2, locked); ps.setString(3, accountId); ps.executeUpdate()
         }
         locked
+    }
+
+    // ---- Attachments -------------------------------------------------------------
+
+    /** How an attachment was made: by an invitation, by the v2 migration, or by a key proof. */
+    data class Attachment(val relRef: String, val accountId: String, val attachedAt: Long, val how: String)
+
+    /**
+     * The relationship's current attachment: its newest row, or null when no account has ever held
+     * it. The rows are insert-only, so "current" is the highest `attach_seq` and nothing else; a row
+     * is never moved, rewritten or removed.
+     */
+    fun attachmentOf(relRef: String): Attachment? = synchronized(lock) { attachmentOfLocked(relRef) }
+
+    private fun attachmentOfLocked(relRef: String): Attachment? =
+        conn.prepareStatement(
+            "SELECT account_id, attached_at, how FROM account_attachments WHERE rel_ref=? ORDER BY attach_seq DESC LIMIT 1",
+        ).use { ps ->
+            ps.setString(1, relRef)
+            ps.executeQuery().use { rs -> if (rs.next()) Attachment(relRef, rs.getString(1), rs.getLong(2), rs.getString(3)) else null }
+        }
+
+    private fun everAttachedLocked(relRef: String): Boolean =
+        conn.prepareStatement("SELECT 1 FROM account_attachments WHERE rel_ref=? LIMIT 1").use { ps ->
+            ps.setString(1, relRef)
+            ps.executeQuery().use { it.next() }
+        }
+
+    private fun insertAttachmentLocked(relRef: String, accountId: String, how: String) {
+        conn.prepareStatement(
+            "INSERT INTO account_attachments(rel_ref, account_id, attached_at, how) VALUES (?,?,?,?)",
+        ).use { ps ->
+            ps.setString(1, relRef); ps.setString(2, accountId); ps.setLong(3, clock()); ps.setString(4, how)
+            ps.executeUpdate()
+        }
+    }
+
+    /**
+     * Whether [accountId] holds [relRef]: the relationship's current attachment names it and the
+     * account is open. Ended relationships are still held, so the leave route stays idempotent.
+     */
+    fun holds(accountId: String, relRef: String): Boolean = synchronized(lock) {
+        attachmentOfLocked(relRef)?.accountId == accountId && !closedLocked(accountId)
+    }
+
+    /**
+     * Whether a session of [accountId] may act on [relRef] at all: [holds], and the relationship has
+     * not ended. The one question every data-plane route asks, on every request. An unattached
+     * relationship and one that never existed answer the same false, so a refusal says nothing about
+     * which it was.
+     */
+    fun reaches(accountId: String, relRef: String): Boolean = synchronized(lock) {
+        attachmentOfLocked(relRef)?.accountId == accountId && !closedLocked(accountId) && endingLocked(relRef) == null
+    }
+
+    /**
+     * The relationships [accountId] reaches, oldest attachment first: the clinician's own list, for
+     * their console to find which of this browser's key records to open. Never a practice's list of
+     * patients; there is no question here that takes a practice.
+     */
+    fun relationshipsOf(accountId: String): List<String> = synchronized(lock) {
+        if (closedLocked(accountId)) return emptyList()
+        conn.prepareStatement(
+            "SELECT a.rel_ref FROM account_attachments a WHERE a.account_id=? " +
+                "AND a.attach_seq = (SELECT MAX(b.attach_seq) FROM account_attachments b WHERE b.rel_ref = a.rel_ref) " +
+                "AND NOT EXISTS (SELECT 1 FROM relationship_endings e WHERE e.rel_ref = a.rel_ref) " +
+                "ORDER BY a.attach_seq",
+        ).use { ps ->
+            ps.setString(1, accountId)
+            ps.executeQuery().use { rs -> buildList { while (rs.next()) add(rs.getString(1)) } }
+        }
+    }
+
+    /**
+     * Attach [relRef] to [accountId] for a session that has a fixture's word for it. Test fixtures
+     * only: every route attaches through [enrollTotp], [attachByInvitation] or [attachByKeyProof],
+     * and StaffAccountTest greps the main sources to say so.
+     */
+    internal fun attachForFixture(relRef: String, accountId: String) = synchronized(lock) {
+        if (attachmentOfLocked(relRef)?.accountId != accountId) insertAttachmentLocked(relRef, accountId, "fixture")
+    }
+
+    data class AttachChallenge(val challengeId: String, val challenge: String, val expiresAt: Long)
+
+    /**
+     * A fresh challenge for [accountId] to sign with the clinician key [relRef]'s owner pinned, live
+     * for [ttlMs] and good once. Bound to the account and the relationship as well as kept in the
+     * signed message, so a challenge asked for one cannot be spent on another. Expired ones are swept
+     * here.
+     */
+    fun issueAttachChallenge(accountId: String, relRef: String, ttlMs: Long): AttachChallenge = synchronized(lock) {
+        val now = clock()
+        conn.prepareStatement("DELETE FROM attach_challenges WHERE expires_at <= ?").use { ps ->
+            ps.setLong(1, now); ps.executeUpdate()
+        }
+        val challengeId = "ac_" + Secrets.newToken(9)
+        val challenge = Secrets.newToken()
+        conn.prepareStatement(
+            "INSERT INTO attach_challenges(challenge_id, account_id, rel_ref, challenge, expires_at) VALUES (?,?,?,?,?)",
+        ).use { ps ->
+            ps.setString(1, challengeId); ps.setString(2, accountId); ps.setString(3, relRef)
+            ps.setString(4, challenge); ps.setLong(5, now + ttlMs)
+            ps.executeUpdate()
+        }
+        AttachChallenge(challengeId, challenge, now + ttlMs)
+    }
+
+    /**
+     * Spend challenge [challengeId]: its text when it was issued to [accountId] for [relRef] and is
+     * unexpired and unspent, else null. Deleted in the same step whatever the signature then says,
+     * so no challenge is checked twice and a replay finds nothing.
+     */
+    fun spendAttachChallenge(challengeId: String, accountId: String, relRef: String): String? = synchronized(lock) {
+        val row = conn.prepareStatement(
+            "SELECT account_id, rel_ref, challenge, expires_at FROM attach_challenges WHERE challenge_id=?",
+        ).use { ps ->
+            ps.setString(1, challengeId)
+            ps.executeQuery().use { rs ->
+                if (rs.next()) listOf(rs.getString(1), rs.getString(2), rs.getString(3), rs.getLong(4).toString()) else null
+            }
+        } ?: return null
+        conn.prepareStatement("DELETE FROM attach_challenges WHERE challenge_id=?").use { ps ->
+            ps.setString(1, challengeId); ps.executeUpdate()
+        }
+        if (row[0] != accountId || row[1] != relRef || row[3].toLong() <= clock()) return null
+        row[2]
+    }
+
+    enum class KeyProofAttach { ATTACHED, ALREADY_HERE, NOT_ATTACHABLE }
+
+    /**
+     * Attach [relRef] to [accountId] once the route has checked a signature over a spent challenge
+     * with the relationship's registered clinician signing key. Inserts one row; the account that
+     * held it before reaches it no more from its next request.
+     *
+     * NOT_ATTACHABLE when the relationship was never attached (no enrolment, so no key to have
+     * proved), when it has ended (an ended relationship stays ended; the way back is a fresh
+     * invitation), or when [accountId] is closed or does not exist. ALREADY_HERE writes nothing.
+     */
+    fun attachByKeyProof(relRef: String, accountId: String): KeyProofAttach = synchronized(lock) {
+        if (!accountExistsLocked(accountId) || closedLocked(accountId)) return KeyProofAttach.NOT_ATTACHABLE
+        val current = attachmentOfLocked(relRef) ?: return KeyProofAttach.NOT_ATTACHABLE
+        if (endingLocked(relRef) != null) return KeyProofAttach.NOT_ATTACHABLE
+        if (current.accountId == accountId) return KeyProofAttach.ALREADY_HERE
+        insertAttachmentLocked(relRef, accountId, ATTACHED_BY_KEY_PROOF)
+        KeyProofAttach.ATTACHED
+    }
+
+    // ---- Closing a lost account --------------------------------------------------
+
+    /**
+     * Close [accountId]: one insert-only row, and every session it holds deleted. Returns true only
+     * for the call that closed it, so the caller writes its one audit row once.
+     *
+     * A closed account signs in nowhere and reaches nothing; its attachments stay as rows, so the
+     * relationships it held are reached by nobody until the clinician re-attaches each one with a key
+     * proof or a fresh invitation. Nobody re-issues another person's sign-in: there is no route that
+     * gives a closed account a new seed, and no route that reopens one.
+     */
+    fun closeAccount(accountId: String): Boolean = synchronized(lock) {
+        if (!accountExistsLocked(accountId)) return false
+        val closed = conn.prepareStatement(
+            "INSERT OR IGNORE INTO account_closures(account_id, closed_at) VALUES (?,?)",
+        ).use { ps ->
+            ps.setString(1, accountId); ps.setLong(2, clock())
+            ps.executeUpdate() > 0
+        }
+        conn.prepareStatement("DELETE FROM account_sessions WHERE account_id=?").use { ps ->
+            ps.setString(1, accountId); ps.executeUpdate()
+        }
+        closed
+    }
+
+    fun isClosed(accountId: String): Boolean = synchronized(lock) { closedLocked(accountId) }
+
+    private fun closedLocked(accountId: String): Boolean =
+        conn.prepareStatement("SELECT 1 FROM account_closures WHERE account_id=?").use { ps ->
+            ps.setString(1, accountId)
+            ps.executeQuery().use { it.next() }
+        }
+
+    // ---- Staff invitations -------------------------------------------------------
+
+    data class StaffInvite(val orgId: String, val role: String, val issuedBy: String)
+
+    /**
+     * Mint a staff invitation: a seat in practice [orgId] with role [role], taken by whoever holds
+     * the secret before [ttlMs] runs out. The plaintext secret is returned once and stored only as
+     * its BLAKE2b digest, which is also the row's key, so there is no invitation id to guess at and
+     * a wrong secret finds nothing at all.
+     */
+    fun mintStaffInvite(orgId: String, role: String, issuedBy: String, ttlMs: Long): Pair<String, Long> = synchronized(lock) {
+        val now = clock()
+        conn.prepareStatement("DELETE FROM staff_invites WHERE expires_at <= ?").use { ps ->
+            ps.setLong(1, now); ps.executeUpdate()
+        }
+        val secret = Secrets.newToken()
+        conn.prepareStatement(
+            "INSERT INTO staff_invites(secret_hash, org_id, role, issued_by, created_at, expires_at) VALUES (?,?,?,?,?,?)",
+        ).use { ps ->
+            ps.setString(1, Secrets.tokenHash(secret)); ps.setString(2, orgId); ps.setString(3, role)
+            ps.setString(4, issuedBy); ps.setLong(5, now); ps.setLong(6, now + ttlMs)
+            ps.executeUpdate()
+        }
+        secret to now + ttlMs
+    }
+
+    /** Spend a staff invitation: what it seats, when it is unexpired and unspent, else null. Good once. */
+    fun spendStaffInvite(secret: String): StaffInvite? = synchronized(lock) {
+        val hash = Secrets.tokenHash(secret)
+        val row = conn.prepareStatement(
+            "SELECT org_id, role, issued_by, expires_at FROM staff_invites WHERE secret_hash=?",
+        ).use { ps ->
+            ps.setString(1, hash)
+            ps.executeQuery().use { rs -> if (rs.next()) StaffInvite(rs.getString(1), rs.getString(2), rs.getString(3)) to rs.getLong(4) else null }
+        } ?: return null
+        conn.prepareStatement("DELETE FROM staff_invites WHERE secret_hash=?").use { ps ->
+            ps.setString(1, hash); ps.executeUpdate()
+        }
+        if (row.second <= clock()) null else row.first
+    }
+
+    /** Whether a staff invitation is live, without spending it: the join route checks before it asks for anything else. */
+    fun staffInviteLive(secret: String): Boolean = synchronized(lock) {
+        conn.prepareStatement("SELECT expires_at FROM staff_invites WHERE secret_hash=?").use { ps ->
+            ps.setString(1, Secrets.tokenHash(secret))
+            ps.executeQuery().use { rs -> rs.next() && rs.getLong(1) > clock() }
+        }
     }
 
     // ---- Sessions ----------------------------------------------------------------
 
     data class NewSession(val sessionId: String, val csrfToken: String, val absoluteExpiry: Long)
 
-    /** Create an opaque session. The raw [NewSession.sessionId] is returned once (cookie) and stored only hashed. */
-    fun createSession(credentialId: String, relRef: String, idleSeconds: Long, absoluteSeconds: Long): NewSession = synchronized(lock) {
+    /**
+     * Create an opaque session for an account. The raw [NewSession.sessionId] is returned once (the
+     * cookie) and stored only hashed. A session names an account, never a relationship: which
+     * relationships it reaches is asked fresh on every request ([reaches]).
+     */
+    fun createSession(accountId: String, idleSeconds: Long, absoluteSeconds: Long): NewSession = synchronized(lock) {
         val sessionId = Secrets.newToken()
         val csrf = Secrets.newToken()
         val now = clock()
         val absolute = now + absoluteSeconds * 1000
         conn.prepareStatement(
-            "INSERT INTO sessions(session_id_hash, credential_id, rel_ref, csrf_token, created_at, last_seen, absolute_expiry, revoked) VALUES (?,?,?,?,?,?,?,0)",
+            "INSERT INTO account_sessions(session_id_hash, account_id, csrf_token, created_at, last_seen, absolute_expiry) VALUES (?,?,?,?,?,?)",
         ).use { ps ->
             ps.setString(1, Secrets.tokenHash(sessionId))
-            ps.setString(2, credentialId)
-            ps.setString(3, relRef)
-            ps.setString(4, csrf)
+            ps.setString(2, accountId)
+            ps.setString(3, csrf)
+            ps.setLong(4, now)
             ps.setLong(5, now)
-            ps.setLong(6, now)
-            ps.setLong(7, absolute)
+            ps.setLong(6, absolute)
             ps.executeUpdate()
         }
         NewSession(sessionId, csrf, absolute)
     }
 
-    data class SessionRecord(val credentialId: String, val relRef: String, val csrfToken: String)
+    data class SessionRecord(val accountId: String, val csrfToken: String)
 
     enum class SessionCheck { OK, EXPIRED, REVOKED, MISSING, BAD_CSRF }
     data class SessionValidation(val check: SessionCheck, val record: SessionRecord? = null)
 
     /**
-     * Validate a session by its raw id (hashed for lookup). Enforces idle + absolute timeouts;
-     * on success touches last_seen. If [requireCsrf] is non-null it must equal the stored
-     * anti-CSRF token (constant-time).
+     * Validate a session by its raw id (hashed for lookup). Enforces idle + absolute timeouts and
+     * refuses a closed account's session as REVOKED; on success touches last_seen. If [requireCsrf]
+     * is non-null it must equal the stored anti-CSRF token (constant-time).
      */
     fun validateSession(sessionId: String, idleSeconds: Long, requireCsrf: String? = null): SessionValidation = synchronized(lock) {
         val now = clock()
         val hash = Secrets.tokenHash(sessionId)
         conn.prepareStatement(
-            "SELECT credential_id, rel_ref, csrf_token, last_seen, absolute_expiry, revoked FROM sessions WHERE session_id_hash=?",
+            "SELECT account_id, csrf_token, last_seen, absolute_expiry FROM account_sessions WHERE session_id_hash=?",
         ).use { ps ->
             ps.setString(1, hash)
             ps.executeQuery().use { rs ->
                 if (!rs.next()) return SessionValidation(SessionCheck.MISSING)
-                val credentialId = rs.getString(1)
-                val relRef = rs.getString(2)
-                val csrf = rs.getString(3)
-                val lastSeen = rs.getLong(4)
-                val absolute = rs.getLong(5)
-                val revoked = rs.getInt(6) != 0
-                if (revoked) return SessionValidation(SessionCheck.REVOKED)
+                val accountId = rs.getString(1)
+                val csrf = rs.getString(2)
+                val lastSeen = rs.getLong(3)
+                val absolute = rs.getLong(4)
+                if (closedLocked(accountId)) return SessionValidation(SessionCheck.REVOKED)
                 if (now >= absolute || now - lastSeen > idleSeconds * 1000) {
                     return SessionValidation(SessionCheck.EXPIRED)
                 }
                 if (requireCsrf != null && !Secrets.constantTimeEquals(requireCsrf, csrf)) {
                     return SessionValidation(SessionCheck.BAD_CSRF)
                 }
-                // Touch idle timer.
-                conn.prepareStatement("UPDATE sessions SET last_seen=? WHERE session_id_hash=?").use { up ->
+                conn.prepareStatement("UPDATE account_sessions SET last_seen=? WHERE session_id_hash=?").use { up ->
                     up.setLong(1, now); up.setString(2, hash); up.executeUpdate()
                 }
-                return SessionValidation(SessionCheck.OK, SessionRecord(credentialId, relRef, csrf))
+                return SessionValidation(SessionCheck.OK, SessionRecord(accountId, csrf))
             }
         }
     }
@@ -1014,51 +1278,29 @@ class AuthStore(
 
     /** Hard-delete a session (logout / instant revoke). */
     fun revokeSession(sessionId: String) = synchronized(lock) {
-        conn.prepareStatement("DELETE FROM sessions WHERE session_id_hash=?").use { ps ->
+        conn.prepareStatement("DELETE FROM account_sessions WHERE session_id_hash=?").use { ps ->
             ps.setString(1, Secrets.tokenHash(sessionId)); ps.executeUpdate()
         }
     }
 
     /**
-     * Hard-delete EVERY session held by one credential. Returns how many were cut.
+     * Hard-delete EVERY session held by one account. Returns how many were cut.
      *
-     * The counterpart to [revokeSession], which needs the raw session id and is therefore only
-     * usable by the person holding it — fine for logging yourself out, useless for the case this
-     * exists for. When a practice removes a member, the removal has to land on sessions the
-     * removing admin has never seen and could not name.
+     * The counterpart to [revokeSession], which needs the raw session id and so serves only the
+     * person holding it. When a practice removes a member, the removal has to land on sessions the
+     * removing admin has never seen and could not name, and at once: a removal you have to wait out
+     * for up to the eight-hour absolute lifetime is one people stop reaching for.
      *
-     * It is a DELETE rather than a flag for the reason [validateSession] would otherwise make
-     * awkward: a `revoked` column already exists there and is honoured, but a revoked row is a row
-     * every future query has to remember to exclude, and the cost of forgetting once is a session
-     * that outlives the decision to end it. Deleting removes the question.
+     * A DELETE rather than a flag, so no later query has to remember to exclude a revoked row.
      *
-     * WHY IMMEDIACY IS THE WHOLE POINT. Without this, "removed from the practice" would mean
-     * "removed at some point in the next eight hours, depending when they last clicked" — the
-     * absolute session lifetime — and every minute of that is a person the practice believes it has
-     * cut off who is still signed in. The spec is unambiguous that server-side cutoff is immediate,
-     * and the annoyance budget insists the safe direction never be the expensive one, which has to
-     * include *waiting*. A revocation you have to wait out is one people stop reaching for.
-     *
-     * WHAT IT DOES NOT DO, and the list is longer than it looks. It cuts sessions, never keys: a
-     * clinician's own copies of whatever a patient already let them decrypt are on their machine
-     * and beyond the reach of any statement in this file, and cryptographic cutoff is the patient's
-     * device rotating a key and re-wrapping it, which this server has never held the material to
-     * do. Less obviously, and more likely to be misread: IT DOES NOT END THE CREDENTIAL. The row in
-     * `totp` is untouched, so the holder of that authenticator can sign in again immediately and be
-     * issued a fresh session by the ordinary verify path. Ending the credential is not something
-     * this server offers at all today, and a practice would not be the party to do it if it did —
-     * the credential was enrolled against a patient's relationship, on the patient's invitation.
-     * So this is a *sign-out*, and calling it a revocation anywhere a person can read would be a
-     * promise the function does not keep. The caller in the org control plane says the same thing
-     * at more length, because that is where somebody will look for it.
-     *
-     * The one threat it genuinely answers, stated so its value is not talked down either: a session
-     * taken from a member — a stolen cookie, a machine left open — is not accompanied by the
-     * authenticator, so cutting it ends that access and there is no way back in without the code.
+     * WHAT IT DOES NOT DO. It cuts sessions, never keys: a clinician's copies of what a patient
+     * already let them decrypt are on their own machine. And IT DOES NOT CLOSE THE ACCOUNT: its holder
+     * can sign in again at once. Closing a lost account is [closeAccount], a separate act with its own
+     * audit row. So this is a sign-out, and nothing a person reads may call it a revocation.
      */
-    fun revokeSessionsForCredential(credentialId: String): Int = synchronized(lock) {
-        conn.prepareStatement("DELETE FROM sessions WHERE credential_id=?").use { ps ->
-            ps.setString(1, credentialId)
+    fun revokeSessionsForCredential(accountId: String): Int = synchronized(lock) {
+        conn.prepareStatement("DELETE FROM account_sessions WHERE account_id=?").use { ps ->
+            ps.setString(1, accountId)
             return ps.executeUpdate()
         }
     }
@@ -1108,7 +1350,9 @@ class AuthStore(
      * Read on the sign-in path, so it is one indexed lookup by primary key. Null is the ordinary
      * answer and is not an error: almost every relationship is live.
      */
-    fun relationshipEnding(relRef: String): RelationshipEnding? = synchronized(lock) {
+    fun relationshipEnding(relRef: String): RelationshipEnding? = synchronized(lock) { endingLocked(relRef) }
+
+    private fun endingLocked(relRef: String): RelationshipEnding? =
         conn.prepareStatement(
             "SELECT rel_ref, credential_id, ended_at FROM relationship_endings WHERE rel_ref=?",
         ).use { ps ->
@@ -1118,7 +1362,6 @@ class AuthStore(
                 RelationshipEnding(rs.getString(1), rs.getString(2), rs.getLong(3))
             }
         }
-    }
 
     override fun close() = synchronized(lock) { conn.close() }
 
@@ -1281,10 +1524,11 @@ class AuthStore(
                      * One row per ended relationship, and the row is the whole mechanism. It does two jobs
                      * that look separate and are not:
                      *
-                     *   1. It CLOSES THE CREDENTIAL. The TOTP verify path asks this table before it issues
-                     *      a session, so a clinician who left cannot sign in again from anywhere — not from
-                     *      a second browser, not from a saved copy of their key record, not with the
-                     *      authenticator still on their phone. That is what makes leaving an off switch
+                     *   1. It CLOSES THE RELATIONSHIP. Every session-cookie route asks this table on every
+                     *      request ([reaches]), so a clinician who left reaches it from nowhere — not from a
+                     *      second browser, not from a saved copy of their key record, not with the
+                     *      authenticator still on their phone — while their account carries on for their
+                     *      other relationships (version 2, #314). That is what makes leaving an off switch
                      *      rather than a per-browser act.
                      *   2. It TELLS THE OWNER, in the only two places the fact can actually help them: a
                      *      line in this relationship's access log, and a refusal the next time they try to
@@ -1312,9 +1556,8 @@ class AuthStore(
                      * path: a relationship that was ended stays ended, and the way back is a fresh
                      * invitation — which is a fresh relationship — exactly as the clinician was told.
                      *
-                     * `credential_id` is stored because the leave route needs it to cut the clinician's
-                     * live sessions, and because a later reader asking "which credential was this" should
-                     * not have to join through a table that may by then have been pruned. It is a
+                     * `credential_id` is the account that ended it, stored so a later reader asking "whose
+                     * was this" need not join through attachments. It is a
                      * therapist-typed username, not a secret, and nothing here is a key.
                      */
                     SchemaChange.Table(
@@ -1341,8 +1584,114 @@ class AuthStore(
                         """.trimIndent(),
                     ),
                 ),
+                /*
+                 * Version 2: staff accounts (#314). One account per person, with relationships
+                 * attached to it, replaces one TOTP credential per relationship.
+                 *
+                 * NOTHING IS RELEASED YET, so the migration is the simplest one that keeps every
+                 * credential working: each `totp` row becomes its own account under the same name and
+                 * seed, with its one relationship attached ("migrated"). A clinician with thirty such
+                 * credentials then has thirty accounts, signs in with any one of them, and attaches
+                 * the other relationships to it by key proof (StaffAccountRoutes). No merge logic.
+                 *
+                 * `totp` and `sessions` stay as version 1 left them, because no version deletes a row
+                 * (Schema). Nothing reads either after this version: a session made before it simply
+                 * stops being recognised, which signs the clinician out once.
+                 */
+                listOf(
+                    SchemaChange.Table(
+                        """
+                        CREATE TABLE IF NOT EXISTS accounts (
+                            account_id     TEXT    NOT NULL PRIMARY KEY,
+                            secret_b64     TEXT    NOT NULL,
+                            fail_count     INTEGER NOT NULL DEFAULT 0,
+                            locked_until   INTEGER NOT NULL DEFAULT 0,
+                            last_used_step INTEGER NOT NULL DEFAULT 0,
+                            created_at     INTEGER NOT NULL
+                        )
+                        """.trimIndent(),
+                        seed = "INSERT INTO accounts(account_id, secret_b64, fail_count, locked_until, last_used_step, created_at) " +
+                            "SELECT credential_id, secret_b64, fail_count, locked_until, last_used_step, created_at FROM totp",
+                    ),
+                    /*
+                     * Which account holds which relationship. INSERT-ONLY: the current holder of a
+                     * relationship is its row with the highest `attach_seq`, and a row is never
+                     * updated or deleted. A relationship that has any row at all refuses an
+                     * invitation-made attachment, which is the job `idx_totp_rel_ref` did, so a
+                     * leftover invitation link can never attach it to a second account. The only
+                     * way a newer row is written for a relationship already held is a key proof
+                     * made with the clinician key its owner pinned.
+                     */
+                    SchemaChange.Table(
+                        """
+                        CREATE TABLE IF NOT EXISTS account_attachments (
+                            attach_seq  INTEGER PRIMARY KEY,
+                            rel_ref     TEXT    NOT NULL,
+                            account_id  TEXT    NOT NULL,
+                            attached_at INTEGER NOT NULL,
+                            how         TEXT    NOT NULL
+                        )
+                        """.trimIndent(),
+                        seed = "INSERT INTO account_attachments(rel_ref, account_id, attached_at, how) " +
+                            "SELECT rel_ref, credential_id, created_at, '$ATTACHED_BY_MIGRATION' FROM totp ORDER BY created_at, credential_id",
+                    ),
+                    SchemaChange.Index("CREATE INDEX IF NOT EXISTS idx_attachments_rel ON account_attachments(rel_ref, attach_seq)"),
+                    SchemaChange.Index("CREATE INDEX IF NOT EXISTS idx_attachments_account ON account_attachments(account_id)"),
+                    // A closed account: insert-only by primary key, never reopened.
+                    SchemaChange.Table(
+                        """
+                        CREATE TABLE IF NOT EXISTS account_closures (
+                            account_id TEXT    NOT NULL PRIMARY KEY,
+                            closed_at  INTEGER NOT NULL
+                        )
+                        """.trimIndent(),
+                    ),
+                    SchemaChange.Table(
+                        """
+                        CREATE TABLE IF NOT EXISTS account_sessions (
+                            session_id_hash TEXT    NOT NULL PRIMARY KEY,
+                            account_id      TEXT    NOT NULL,
+                            csrf_token      TEXT    NOT NULL,
+                            created_at      INTEGER NOT NULL,
+                            last_seen       INTEGER NOT NULL,
+                            absolute_expiry INTEGER NOT NULL
+                        )
+                        """.trimIndent(),
+                    ),
+                    SchemaChange.Index("CREATE INDEX IF NOT EXISTS idx_account_sessions_account ON account_sessions(account_id)"),
+                    // Challenges a key-proof attachment signs, each good once, for one account and one relationship.
+                    SchemaChange.Table(
+                        """
+                        CREATE TABLE IF NOT EXISTS attach_challenges (
+                            challenge_id TEXT    NOT NULL PRIMARY KEY,
+                            account_id   TEXT    NOT NULL,
+                            rel_ref      TEXT    NOT NULL,
+                            challenge    TEXT    NOT NULL,
+                            expires_at   INTEGER NOT NULL
+                        )
+                        """.trimIndent(),
+                    ),
+                    // A practice's staff invitations, keyed by the digest of their secret; spent once.
+                    SchemaChange.Table(
+                        """
+                        CREATE TABLE IF NOT EXISTS staff_invites (
+                            secret_hash TEXT    NOT NULL PRIMARY KEY,
+                            org_id      TEXT    NOT NULL,
+                            role        TEXT    NOT NULL,
+                            issued_by   TEXT    NOT NULL,
+                            created_at  INTEGER NOT NULL,
+                            expires_at  INTEGER NOT NULL
+                        )
+                        """.trimIndent(),
+                    ),
+                ),
             ),
         )
+
+        /** The words in `account_attachments.how`: what made each attachment. */
+        const val ATTACHED_BY_INVITATION = "invitation"
+        const val ATTACHED_BY_MIGRATION = "migrated"
+        const val ATTACHED_BY_KEY_PROOF = "key_proof"
 
         /** Enrollment tickets are short-lived — a therapist enrolls TOTP immediately after redeeming. */
         const val ENROLL_TICKET_TTL_MS = 10 * 60 * 1000L

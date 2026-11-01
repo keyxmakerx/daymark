@@ -85,6 +85,33 @@ private fun auditSafely(block: () -> Unit) {
  */
 @Serializable data class OrgMemberRemovedDto(val memberId: String, val sessionsCut: Int)
 
+@Serializable data class StaffInviteRequest(val role: String)
+
+/**
+ * A staff invitation, handed to the administrator who asked for it to pass on. [link] carries a
+ * one-use seat secret in its fragment; it opens no content and seats one person (#314).
+ */
+@Serializable data class StaffInviteDto(val link: String, val role: String, val expiresAt: Long)
+
+/**
+ * Taking a staff invitation. With a session cookie and X-CSRF-Token, the signed-in account takes the
+ * seat and the other fields are ignored. Without one, [accountId], [totpSecret] and [totpCode] make
+ * a new account first: the invitation creates the invitee's account when they have none here.
+ */
+@Serializable data class StaffJoinRequest(
+    val invitation: String,
+    val accountId: String? = null,
+    val totpSecret: String? = null,
+    val totpCode: String? = null,
+)
+
+@Serializable data class StaffJoinDto(val orgId: String, val accountId: String, val role: String, val csrfToken: String? = null, val absoluteExpiry: Long? = null)
+
+@Serializable data class AccountClosedDto(val memberId: String, val closed: Boolean)
+
+/** How long a staff invitation lives: a week, long enough to reach a new hire's first day. */
+internal const val STAFF_INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000L
+
 /** Fresh-proof-of-presence header for the two acts that widen who may be granted. See [stepUpSatisfied]. */
 private const val STEP_UP_HEADER = "X-Stepup-Code"
 
@@ -197,6 +224,16 @@ fun Route.orgRoutes(
     orgLimiter: AttemptLimiter = AttemptLimiter(THERAPIST_MAX_PER_WINDOW, THERAPIST_WINDOW_MS),
     /** Injectable so a test can drive step-up without waiting on a real TOTP window. */
     clock: () -> Long = { System.currentTimeMillis() },
+    /** The configured public address, for the staff invitation link; see [resolveBaseUrl]. */
+    publicBaseUrl: String? = null,
+    sessionAbsoluteSeconds: Long = 8 * 60 * 60L,
+    cookieSecure: Boolean = true,
+    /**
+     * Per-source budget for the anonymous join route, which makes accounts. A staff invitation
+     * secret is 256 bits and keyed only by its digest, so no number of guesses finds one; this
+     * bounds how fast one address can make accounts with invitations it really holds.
+     */
+    joinLimiter: AttemptLimiter = AttemptLimiter(20, 5 * 60_000L),
 ) {
     route("/v1/orgs") {
 
@@ -243,6 +280,80 @@ fun Route.orgRoutes(
                 }
                 else -> call.respondOrgWrite(outcome)
             }
+        }
+
+        /*
+         * Take a staff invitation (#314): the one way a receptionist, or anybody with no patient
+         * invitation, comes to have an account on this server, and the way a practice seats an
+         * account rather than a name an administrator typed.
+         *
+         * The seat is ACCEPTED at once, because the person themselves is the one taking it, holding
+         * either their own session or the authenticator they are enrolling now; that is the standing
+         * Membership.accepted records. No relationship comes with it: a seat confers no reading.
+         *
+         * Every refusal of the invitation itself is one 401 ("not valid any more"), whether it never
+         * existed, was spent or ran out. A new account's authenticator is checked first and a
+         * mistyped code spends nothing, as on the owner's own sign-up.
+         */
+        post("/join") {
+            if (!joinLimiter.allow(call.clientAddress())) {
+                return@post call.respond(HttpStatusCode.TooManyRequests, ErrorDto("too many attempts from here; wait a few minutes and try again"))
+            }
+            val req = call.receiveCappedJson<StaffJoinRequest>() ?: return@post
+            val invitation = req.invitation.trim()
+            val sessionId = call.request.cookies["daymark_session"]
+            val existing = if (sessionId != null) {
+                val csrf = call.request.headers["X-CSRF-Token"]
+                    ?: return@post call.respond(HttpStatusCode.Unauthorized, ErrorDto("unauthorized"))
+                val v = authStore.validateSession(sessionId, sessionIdleSeconds, requireCsrf = csrf)
+                v.record?.takeIf { v.check == AuthStore.SessionCheck.OK }
+                    ?: return@post call.respond(HttpStatusCode.Unauthorized, ErrorDto("unauthorized"))
+            } else {
+                null
+            }
+            if (existing != null) {
+                val invite = authStore.spendStaffInvite(invitation)
+                    ?: return@post call.respond(HttpStatusCode.Unauthorized, ErrorDto(STAFF_INVITE_REFUSED))
+                val role = OrgRole.fromWire(invite.role)
+                    ?: return@post call.respond(HttpStatusCode.Unauthorized, ErrorDto(STAFF_INVITE_REFUSED))
+                if (!seat(orgStore, invite, existing.accountId, role)) {
+                    return@post call.respond(HttpStatusCode.Unauthorized, ErrorDto(STAFF_INVITE_REFUSED))
+                }
+                call.respond(StaffJoinDto(invite.orgId, existing.accountId, role.wire))
+                auditJoined(orgAudit, invite, existing.accountId, role, auditSourceIp, call)
+                return@post
+            }
+
+            val accountId = req.accountId?.trim().orEmpty()
+            if (!OrgStore.isName(accountId)) {
+                return@post call.respond(HttpStatusCode.BadRequest, ErrorDto("the sign-in name must be 1 to 64 letters, digits, dashes or underscores"))
+            }
+            val seed = req.totpSecret?.let { decodeSeed(it) }
+                ?: return@post call.respond(HttpStatusCode.BadRequest, ErrorDto("the authenticator key could not be read; start again"))
+            val step = Totp.verifyStep(seed, req.totpCode?.trim().orEmpty(), authStore.nowMs() / 1000)
+                ?: return@post call.respond(HttpStatusCode.UnprocessableEntity, ErrorDto("the six digits did not match the authenticator; nothing was changed, so try the next six"))
+            if (!authStore.staffInviteLive(invitation)) {
+                return@post call.respond(HttpStatusCode.Unauthorized, ErrorDto(STAFF_INVITE_REFUSED))
+            }
+            // Checked before the invitation is spent, so a taken name costs the invitation nothing.
+            if (authStore.accountExists(accountId)) {
+                return@post call.respond(HttpStatusCode.Conflict, ErrorDto("that sign-in name is taken on this server; choose another"))
+            }
+            val invite = authStore.spendStaffInvite(invitation)
+                ?: return@post call.respond(HttpStatusCode.Unauthorized, ErrorDto(STAFF_INVITE_REFUSED))
+            val role = OrgRole.fromWire(invite.role)
+                ?: return@post call.respond(HttpStatusCode.Unauthorized, ErrorDto(STAFF_INVITE_REFUSED))
+            if (!authStore.createAccount(accountId, Base64.getUrlEncoder().withoutPadding().encodeToString(seed), step)) {
+                return@post call.respond(HttpStatusCode.Conflict, ErrorDto("that sign-in name is taken on this server; choose another"))
+            }
+            if (!seat(orgStore, invite, accountId, role)) {
+                return@post call.respond(HttpStatusCode.Unauthorized, ErrorDto(STAFF_INVITE_REFUSED))
+            }
+            joinLimiter.reset(call.clientAddress())
+            val session = authStore.createSession(accountId, sessionIdleSeconds, sessionAbsoluteSeconds)
+            call.response.cookies.append(sessionCookie(session.sessionId, cookieSecure))
+            call.respond(StaffJoinDto(invite.orgId, accountId, role.wire, session.csrfToken, session.absoluteExpiry))
+            auditJoined(orgAudit, invite, accountId, role, auditSourceIp, call)
         }
 
         route("/{orgId}") {
@@ -491,6 +602,90 @@ fun Route.orgRoutes(
             }
 
             /*
+             * Give out a staff invitation (#314). Membership authority and step-up, as adding a member
+             * is: it is the same decision, made for somebody who has no account yet. The operator's
+             * provisioning credential may also give one out, for the administrator role only, which
+             * is how a new practice's first administrator, or the replacement for a lost one, comes
+             * to have an account.
+             */
+            post("/staff-invites") {
+                val provisioner = ownerGuard.presentsCredential(call)
+                var actor: OrgActor? = null
+                val orgId: String
+                val issuedBy: String
+                if (provisioner) {
+                    if (!call.ownerAuthorized(ownerGuard)) return@post
+                    orgId = call.parameters["orgId"].orEmpty()
+                    if (orgStore.org(orgId) == null) return@post call.respond(HttpStatusCode.NotFound, ErrorDto("not found"))
+                    issuedBy = PROVISIONER
+                } else {
+                    val member = resolveActor(orgStore, authStore, sessionIdleSeconds, orgLimiter, requireCsrf = true) ?: return@post
+                    if (!call.requireCapability(member, OrgAction.MANAGE_MEMBERSHIP, orgAudit, auditSourceIp)) return@post
+                    actor = member
+                    orgId = member.orgId
+                    issuedBy = member.membership.memberId
+                }
+                val req = call.receiveCappedJson<StaffInviteRequest>() ?: return@post
+                val role = OrgRole.fromWire(req.role)
+                    ?: return@post call.respond(HttpStatusCode.BadRequest, ErrorDto("unknown role"))
+                if (provisioner && role != OrgRole.ORG_ADMIN) {
+                    return@post call.respond(HttpStatusCode.Forbidden, ErrorDto("the operator gives out administrator invitations only"))
+                }
+                // Step-up last, once the request is known to be well formed (see POST /members).
+                if (actor != null && !call.requireStepUp(actor, authStore, clock, orgAudit, auditSourceIp)) return@post
+                val (secret, expiresAt) = authStore.mintStaffInvite(orgId, role.wire, issuedBy, STAFF_INVITE_TTL_MS)
+                val link = "${resolveBaseUrl(call, publicBaseUrl)}/practice.html#join=$secret"
+                call.respond(HttpStatusCode.Created, StaffInviteDto(link, role.wire, expiresAt))
+                auditSafely {
+                    orgAudit.append(
+                        orgId,
+                        if (provisioner) AuditActor.PLATFORM else AuditActor.ORG_ADMIN,
+                        AuditAction.ORG_STAFF_INVITED,
+                        objectRef = role.wire,
+                        meta = orgMeta(auditSourceIp, call, "actor" to issuedBy),
+                    )
+                }
+            }
+
+            /*
+             * Close a member's lost account (#314). Membership authority, step-up, and the member must
+             * have accepted their seat here: that acceptance is the only standing a practice has over
+             * a person's sign-in. Nobody closes their own account this way.
+             *
+             * WHAT IT DOES. The account signs in nowhere from now on, on this practice or any other,
+             * and every session it holds ends now. The relationships it held are reached by nobody
+             * until their clinician attaches each one to a new account with their own key, or a fresh
+             * invitation; nothing here can do that for them, and no route re-issues another person's
+             * sign-in. The membership row stays until somebody removes it.
+             *
+             * One audit row, on the closing; a second close writes nothing.
+             */
+            post("/members/{memberId}/close") {
+                val actor = resolveActor(orgStore, authStore, sessionIdleSeconds, orgLimiter, requireCsrf = true) ?: return@post
+                if (!call.requireCapability(actor, OrgAction.MANAGE_MEMBERSHIP, orgAudit, auditSourceIp)) return@post
+                val memberId = call.parameters["memberId"].orEmpty()
+                val seat = orgStore.membership(actor.orgId, memberId)
+                if (seat == null || !seat.accepted) {
+                    return@post call.respond(HttpStatusCode.NotFound, ErrorDto("not a member"))
+                }
+                if (memberId == actor.membership.memberId) {
+                    return@post call.respond(HttpStatusCode.Conflict, ErrorDto("an account cannot be closed by its own holder here"))
+                }
+                if (!call.requireStepUp(actor, authStore, clock, orgAudit, auditSourceIp)) return@post
+                val closed = authStore.closeAccount(memberId)
+                call.respond(AccountClosedDto(memberId, closed = true))
+                if (closed) {
+                    auditSafely {
+                        orgAudit.append(
+                            actor.orgId, AuditActor.ORG_ADMIN, AuditAction.ORG_ACCOUNT_CLOSED,
+                            objectRef = memberId,
+                            meta = orgMeta(auditSourceIp, call, "actor" to actor.membership.memberId),
+                        )
+                    }
+                }
+            }
+
+            /*
              * The practice's own control-plane history. Admin only — "audit review" is in their row
              * of the role catalog and nobody else's.
              *
@@ -526,6 +721,27 @@ fun Route.orgRoutes(
 
 /** Recorded as the seating authority for a practice's first admin. Not a member of anything. */
 private const val PROVISIONER = "platform"
+
+/** Every refusal of a staff invitation reads the same: never existed, spent and expired alike. */
+const val STAFF_INVITE_REFUSED = "this invitation is not valid any more; ask the practice for a new one"
+
+/** Seat [accountId] in the invitation's practice, accepted, as the person themselves taking it. */
+private fun seat(orgStore: OrgStore, invite: AuthStore.StaffInvite, accountId: String, role: OrgRole): Boolean {
+    val added = orgStore.addMember(invite.orgId, accountId, role, invite.issuedBy)
+    if (added != OrgWrite.OK && added != OrgWrite.ALREADY_EXISTS) return false
+    val accepted = orgStore.acceptMembership(invite.orgId, accountId)
+    return accepted == OrgWrite.OK
+}
+
+private fun auditJoined(orgAudit: AuditStore, invite: AuthStore.StaffInvite, accountId: String, role: OrgRole, auditSourceIp: Boolean, call: ApplicationCall) {
+    auditSafely {
+        orgAudit.append(
+            invite.orgId, AuditActor.ORG_MEMBER, AuditAction.ORG_MEMBER_JOINED,
+            objectRef = accountId,
+            meta = orgMeta(auditSourceIp, call, "role" to role.wire, "invitedBy" to invite.issuedBy),
+        )
+    }
+}
 
 private fun Membership.toDto() = OrgMemberDto(memberId, role.wire, addedAt, accepted)
 
@@ -590,7 +806,7 @@ private suspend fun RoutingContext.resolveActor(
     // The acting person IS their portal credential id. That is the only server-side identity a
     // clinician has, and taking it from the SESSION rather than from the request is what stops a
     // caller nominating whose authority they are acting under.
-    val membership = orgStore.membership(orgId, session.credentialId) ?: run {
+    val membership = orgStore.membership(orgId, session.accountId) ?: run {
         call.respond(HttpStatusCode.NotFound, ErrorDto("not found")); return null
     }
     return OrgActor(orgId, membership)
@@ -678,7 +894,7 @@ private suspend fun ApplicationCall.requireStepUp(
  */
 private fun stepUpSatisfied(authStore: AuthStore, call: ApplicationCall, memberId: String, nowMs: Long): Boolean {
     val presented = call.request.headers[STEP_UP_HEADER]?.trim()?.ifBlank { null } ?: return false
-    val credential = authStore.getTotp(memberId) ?: return false
+    val credential = authStore.account(memberId)?.takeIf { !it.closed } ?: return false
     val seed = decodeStepUpSeed(credential.secretB64) ?: return false
     val step = Totp.verifyStep(seed, presented, nowMs / 1000) ?: return false
     return authStore.consumeTotpStep(memberId, step)

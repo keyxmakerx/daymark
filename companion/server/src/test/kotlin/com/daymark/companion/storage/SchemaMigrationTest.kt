@@ -114,14 +114,18 @@ class SchemaMigrationTest {
     private fun lookInto(copy: Path): Path =
         Files.createTempDirectory("schema-copy").resolve(copy.name).also { Files.copy(copy, it) }
 
-    /** An auth.db at version 1 holding invites and a key registration, written by the real store. */
-    private fun authAtVersion1(dir: Path): Path {
+    /** auth.db's version in this release, and the one a change on top of it makes. */
+    private val authNow = AuthStore.SCHEMA.current
+    private val authNext = authNow + 1
+
+    /** An auth.db at this release's version holding invites and a key registration, written by the real store. */
+    private fun authAtCurrent(dir: Path): Path {
         AuthStore(dir.toString()).use { auth ->
             auth.mintInvite("relA", listOf("read.share"), ttlSeconds = 86_400L)
             auth.mintInvite("relB", listOf("read.share"), ttlSeconds = 86_400L)
             auth.registerTherapistKeys("relA", "box-pub", "sign-pub")
         }
-        return dir.resolve("auth.db").also { assertEquals(1, userVersion(it), "the fixture is at version 1") }
+        return dir.resolve("auth.db").also { assertEquals(authNow, userVersion(it), "the fixture is at the current version") }
     }
 
     // ---- A version to the next -----------------------------------------------------------------
@@ -129,7 +133,7 @@ class SchemaMigrationTest {
     @Test
     fun `a database at the previous version is copied to _pre-migrate, then brought to the current one`() {
         val dir = tmpDir()
-        val db = authAtVersion1(dir)
+        val db = authAtCurrent(dir)
         val layout = layout(db)
         val before = contents(db, layout)
         assertEquals(2, before.getValue("invites").size, "the fixture holds rows, so the copy has something to hold")
@@ -140,13 +144,13 @@ class SchemaMigrationTest {
         )
         next.open(dir, clock).close()
 
-        assertEquals(2, userVersion(db))
+        assertEquals(authNext, userVersion(db))
         assertTrue("note" in columns(db, "invites") && hasIndex(db, "idx_invites_status"), "the change was made")
         assertEquals(before, contents(db, layout), "and every row is as it was")
 
-        assertEquals(listOf("auth.v1.20260926T144512Z.db"), copies(dir), "one copy, named for the database, the version it held and the time")
-        val copy = lookInto(dir.resolve(Schema.PRE_MIGRATE_DIR).resolve("auth.v1.20260926T144512Z.db"))
-        assertEquals(1, userVersion(copy), "the copy is the database as it was before the change")
+        assertEquals(listOf("auth.v$authNow.20260926T144512Z.db"), copies(dir), "one copy, named for the database, the version it held and the time")
+        val copy = lookInto(dir.resolve(Schema.PRE_MIGRATE_DIR).resolve("auth.v$authNow.20260926T144512Z.db"))
+        assertEquals(authNow, userVersion(copy), "the copy is the database as it was before the change")
         assertFalse("note" in columns(copy, "invites"))
         assertEquals(before, contents(copy, layout), "and it opens and holds every row it held")
     }
@@ -156,7 +160,7 @@ class SchemaMigrationTest {
         // Control first, on the same fixture: the change without its failing half does alter the
         // bytes, so an unchanged checksum below is the rollback and not a blind hash.
         val controlDir = tmpDir()
-        val control = authAtVersion1(controlDir)
+        val control = authAtCurrent(controlDir)
         val unchanged = sha256(control)
         AuthStore.SCHEMA.plus(SchemaChange.Column("invites", "note", "TEXT")).open(controlDir, clock).close()
         assertNotEquals(unchanged, sha256(control), "control: the first half of the change alone alters the file")
@@ -165,7 +169,7 @@ class SchemaMigrationTest {
         // from somewhere else may be. Nothing may reach the file before the change's transaction in either.
         for (mode in listOf("WAL", "DELETE")) {
             val dir = tmpDir()
-            val db = authAtVersion1(dir)
+            val db = authAtCurrent(dir)
             exec(db, "PRAGMA journal_mode=$mode")
             // A NOT NULL column with no default cannot be added to a table that has rows, and invites has
             // two, so the second change fails after the first has been made.
@@ -179,13 +183,13 @@ class SchemaMigrationTest {
             val refusal = assertFailsWith<StartupRefusal>(mode) { failing.open(dir, clock) }
 
             assertEquals(
-                "Refusing to start: auth.db could not be changed from structure version 1 to 2 (SQLITE_ERROR); " +
+                "Refusing to start: auth.db could not be changed from structure version $authNow to $authNext (SQLITE_ERROR); " +
                     "the change was rolled back and the file is as it was (COMPANION_DEPLOYMENT.md §7).",
                 refusal.message,
                 mode,
             )
             assertEquals(original, sha256(db), "$mode: byte for byte as it was, the column added first gone with the rollback")
-            assertEquals(1, userVersion(db), mode)
+            assertEquals(authNow, userVersion(db), mode)
             assertFalse("note" in columns(db, "invites"), mode)
             assertEquals(emptyList(), copies(dir), "$mode: the copy taken first is removed, since the file it copied is untouched")
             assertTrue(dir.resolve(Schema.PRE_MIGRATE_DIR).exists(), "$mode control: a copy was taken, in the directory it was removed from")
@@ -195,7 +199,7 @@ class SchemaMigrationTest {
     @Test
     fun `no change is made when the copy that comes first cannot be written`() {
         val dir = tmpDir()
-        val db = authAtVersion1(dir)
+        val db = authAtCurrent(dir)
         val original = sha256(db)
         // A file where the copies' directory goes, so the copy cannot be written whoever runs the server.
         Files.write(dir.resolve(Schema.PRE_MIGRATE_DIR), byteArrayOf())
@@ -204,20 +208,20 @@ class SchemaMigrationTest {
         val refusal = assertFailsWith<StartupRefusal> { next.open(dir, clock) }
 
         assertEquals(
-            "Refusing to start: auth.db needs its structure changed from version 1 to 2, and the copy that comes " +
+            "Refusing to start: auth.db needs its structure changed from version $authNow to $authNext, and the copy that comes " +
                 "first could not be written to _pre-migrate/ (FileAlreadyExistsException); nothing was changed " +
                 "(COMPANION_DEPLOYMENT.md §7).",
             refusal.message,
         )
         assertEquals(original, sha256(db), "no copy, no change")
-        assertEquals(1, userVersion(db))
+        assertEquals(authNow, userVersion(db))
         assertFalse("note" in columns(db, "invites"))
 
         // Control: with the way to the copies clear, the same change is made, after its copy.
         Files.delete(dir.resolve(Schema.PRE_MIGRATE_DIR))
         next.open(dir, clock).close()
-        assertEquals(2, userVersion(db))
-        assertEquals(listOf("auth.v1.20260926T144512Z.db"), copies(dir))
+        assertEquals(authNext, userVersion(db))
+        assertEquals(listOf("auth.v$authNow.20260926T144512Z.db"), copies(dir))
     }
 
     // ---- The first real version: owner-account.db gains the phones (#186, #189) ----------------------
@@ -283,9 +287,9 @@ class SchemaMigrationTest {
     // ---- Databases from before versions were kept ----------------------------------------------
 
     @Test
-    fun `a database written before versions were kept, in today's structure, is marked version 1 with every row kept and nothing copied`() {
+    fun `a database written before versions were kept, in today's structure, is marked with its version, with every row kept and nothing copied`() {
         val dir = tmpDir()
-        val db = authAtVersion1(dir)
+        val db = authAtCurrent(dir)
         stamp(db, 0) // what the release before this one wrote: the same statements, and no version
         assertEquals(0, userVersion(db))
         val layout = layout(db)
@@ -296,7 +300,7 @@ class SchemaMigrationTest {
             assertNotNull(auth.therapistKeys("relA"), "the store reads what was there")
         }
 
-        assertEquals(1, userVersion(db))
+        assertEquals(authNow, userVersion(db))
         assertEquals(layout, layout(db), "no table or column was added: it already had them all")
         assertEquals(before, contents(db, layout), "and no row was lost or changed")
         assertEquals(emptyList(), copies(dir), "nothing about its structure changed, so nothing was copied")
@@ -370,7 +374,7 @@ class SchemaMigrationTest {
             assertTrue(befores.getValue(db).values.any { it.isNotEmpty() }, "${db.name}: and holds rows")
         }
 
-        AuthStore(authDir.toString()).use { store -> assertNotNull(store.getTotp("cred-1"), "the credential is still there") }
+        AuthStore(authDir.toString()).use { store -> assertNotNull(store.account("cred-1"), "the credential is still there") }
         PairingStore(pairingDir.toString()).use { store ->
             val exchange = assertNotNull(store.latestExchangeFor("inv-1"))
             assertEquals("msg-b", exchange.msgBB64)
@@ -382,7 +386,8 @@ class SchemaMigrationTest {
 
         for ((dir, db, added) in cases) {
             val name = db.name
-            assertEquals(1, userVersion(db), "$name is marked version 1")
+            val marked = if (name == "auth.db") authNow else 1
+            assertEquals(marked, userVersion(db), "$name is marked version $marked")
             assertTrue(added.all { (t, c) -> c in columns(db, t) }, "$name gained ${added.map { it.second }}")
             assertEquals(befores.getValue(db), contents(db, layouts.getValue(db)), "$name kept every row, unchanged")
 
@@ -515,7 +520,7 @@ class SchemaMigrationTest {
     @Test
     fun `a database stamped newer than this release is refused and left as it was, and nothing is copied`() {
         val dir = tmpDir()
-        val db = authAtVersion1(dir)
+        val db = authAtCurrent(dir)
         val newer = AuthStore.SCHEMA.current + 1
         stamp(db, newer)
         val before = sha256(db)
@@ -540,7 +545,7 @@ class SchemaMigrationTest {
     fun `a database recording a version below 0 is refused and left as it was`() {
         // No release writes one; something other than this server did, and it is not this server's to read.
         val dir = tmpDir()
-        val db = authAtVersion1(dir)
+        val db = authAtCurrent(dir)
         stamp(db, -1)
         val before = sha256(db)
 

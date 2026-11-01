@@ -57,10 +57,11 @@ private fun auditSafely(block: () -> Unit) {
  * ─── WHAT THE ENDING DOES, AND THE EXACT LIST ───────────────────────────────────────────────────
  *
  *   1. One row in `relationship_endings`, insert-only by primary key.
- *   2. Every live session that credential holds is cut, so the ending is immediate rather than
- *      "within the next eight hours, depending when they last clicked".
- *   3. The TOTP verify path refuses this credential from then on, so there is no signing back in.
- *   4. One line in the relationship's audit log, which is where the owner reads it.
+ *   2. Every session-cookie route reads that row on every request (AuthStore.reaches), so the
+ *      account reaches this relationship no more from the next request on, in every session on
+ *      every machine, and no sign-in reopens it. The account itself, and its other relationships,
+ *      carry on: one sign-in per person (#314).
+ *   3. One line in the relationship's audit log, which is where the owner reads it.
  *
  * And the list of what it does not touch is the point of the feature, not a footnote: no share is
  * withdrawn, no blob is written or deleted, no grant is altered, no key is rotated, and nothing at
@@ -80,23 +81,14 @@ private fun auditSafely(block: () -> Unit) {
  * clinician is not un-sending anything; the honest mirror is that leaving does not reach copies.
  * See companion/web/src/lib/therapist/leave.ts for that argument in full.
  *
- * ─── WHY CLOSING A CREDENTIAL IS NOT DELETING ONE ───────────────────────────────────────────────
+ * ─── WHY ENDING IS NOT DELETING ─────────────────────────────────────────────────────────────────
  *
- * The `totp` table is insert-only, and both halves of that matter here. A DELETE would remove the
- * row whose unique `rel_ref` index is the only thing stopping a second enrolment — handing anyone
- * still holding the invitation link a way to enrol a fresh credential against a relationship
- * somebody has just left. An UPDATE ("disabled=1") would be an update path into the one table whose
- * whole safety property is that it has none. So the closure is a row in a SEPARATE insert-only
- * table, consulted on the way in. `totp` is never touched. See AuthStore's table header.
- *
- * ─── ONE CREDENTIAL PER RELATIONSHIP, WHICH IS WHY THIS IS SAFE ─────────────────────────────────
- *
- * `idx_totp_rel_ref` is a UNIQUE index, and `enrollTotp` refuses a second credential for a relRef.
- * So a clinician's credential belongs to exactly one relationship, and closing it can reach no
- * other patient's work. If that ever stopped being true, this route would be closing a credential
- * other relationships depend on and would need to become a per-relationship closure instead — which
- * is why the ending is keyed on the RELATIONSHIP rather than on the credential, so the property
- * lives in the schema rather than in the coincidence.
+ * Attachments are insert-only, and a relationship that has ever been attached refuses an
+ * invitation-made attachment. A DELETE of the attachment would undo that and hand anyone still
+ * holding the invitation link a way to attach a relationship somebody has just left. So the ending
+ * is a row in a SEPARATE insert-only table, keyed on the RELATIONSHIP, and ending one relationship
+ * can reach no other patient's work. An ended relationship stays ended: a key proof cannot
+ * re-attach it (AuthStore.attachByKeyProof).
  */
 fun Route.relationshipEndingRoutes(
     authStore: AuthStore,
@@ -121,20 +113,13 @@ fun Route.relationshipEndingRoutes(
          * the ending itself rather than per call, which is the same rule the lockout path follows
          * and for the same reason — a log that grows a row per retry buries the row that matters.
          *
-         * IT REVEALS NOTHING TO A SESSION BOUND ELSEWHERE. A session for relationship A calling
-         * relationship B's path gets the same 403 the therapist-keys route gives, with the same
-         * wording, before anything is read or written. There is no honest way for a client to reach
-         * that: the portal builds this URL out of the session it just authenticated with. So it is
-         * either a client bug about to end a DIFFERENT person's relationship, or somebody probing to
-         * see whether the path is what the server keys on, and answering "not found" or quietly
-         * acting on the session's own relRef would let both succeed. 403 rather than 401 because the
-         * caller IS authenticated and re-authenticating cannot help.
+         * IT REVEALS NOTHING TO AN ACCOUNT THAT DOES NOT HOLD THE RELATIONSHIP. Its path gets the
+         * same 403 the therapist-keys route gives, with the same wording, before anything is read
+         * or written, whether the relationship is another account's or never existed. 403 rather
+         * than 401 because the caller IS authenticated and re-authenticating cannot help.
          *
-         * ORDER: THE ROW FIRST, THE SESSIONS SECOND. If the process dies between them the surviving
-         * state is "ended, with a session still alive until it times out" — which is recoverable and
-         * bounded, because the verify path already refuses any new sign-in. The other order would
-         * leave "signed out, not ended", which looks exactly like a completed leave and is not one:
-         * the clinician would sign straight back in.
+         * ONE WRITE, AND IT TAKES EFFECT ON THE NEXT REQUEST. Nothing has to be cut in a second
+         * step that a crash could leave undone, because every route asks for the ending fresh.
          */
         post {
             val sessionId = call.request.cookies["daymark_session"]
@@ -161,18 +146,19 @@ fun Route.relationshipEndingRoutes(
 
             val pathRelRef = call.parameters["relRef"]
                 ?: return@post call.respond(HttpStatusCode.BadRequest, ErrorDto("missing relRef"))
-            if (!Secrets.constantTimeEquals(session.relRef, pathRelRef)) {
+            // HOLDS, not reaches: an ended relationship is still held by the account that ended it,
+            // so a second leave answers as the first did. A replacement account an administrator
+            // seated holds nothing, and so can end nothing (#314).
+            if (!authStore.holds(session.accountId, pathRelRef)) {
                 return@post call.respond(HttpStatusCode.Forbidden, ErrorDto("session does not cover this relationship"))
             }
-            // From here the session's own values are the only ones used. The path parameter has done
-            // its whole job by agreeing.
-            val relRef = session.relRef
-            val credentialId = session.credentialId
+            val relRef = pathRelRef
+            val credentialId = session.accountId
 
+            // One relationship closes, never the account: the account's other relationships and its
+            // sessions carry on, and every data-plane route refuses this one from its next request
+            // because AuthStore.reaches reads the ending.
             val write = authStore.endRelationship(relRef, credentialId)
-            // Every session this credential holds, not just the one that asked. A clinician saying
-            // they are finished means finished on the clinic machine they walked away from too.
-            authStore.revokeSessionsForCredential(credentialId)
             call.respond(HttpStatusCode.NoContent)
             if (write == AuthStore.EndingWrite.RECORDED) {
                 auditSafely {

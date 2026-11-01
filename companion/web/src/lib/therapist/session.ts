@@ -8,6 +8,8 @@
  *   POST /v1/totp/enroll                → 204   (single-use enrollTicket-gated; relRef derived server-side)
  *   POST /v1/totp/verify                → sets HttpOnly daymark_session cookie + { csrfToken, absoluteExpiry }
  *   POST /v1/session/logout             → 204                         (needs cookie + X-CSRF-Token)
+ *   GET  /v1/account/relationships      → the relationships the signed-in account reaches (#314)
+ *   POST /v1/account/attach/…           → attach a relationship by invitation or by key proof
  *   GET/PUT /v1/rel/{relRef}/{channel}/...  (session cookie = THERAPIST role, X-Rel-Token routing)
  *
  * The session cookie is HttpOnly, so the SPA CANNOT read it; state-changing requests instead carry
@@ -291,6 +293,58 @@ export class PortalClient {
     return (await res.json()) as { signPubB64: string; boxPubB64: string; registeredAt: number }
   }
 
+  // --- the staff account (#314) ---
+
+  /**
+   * The relationships the signed-in account reaches now, which the console uses to find this
+   * browser's key records for them. The clinician's own list; the server keeps none of a practice's.
+   */
+  async accountRelationships(): Promise<{ accountId: string; relationships: string[] }> {
+    const res = await this.req('/v1/account/relationships')
+    if (res.status === 401) throw new PortalError('not signed in', 401)
+    if (!res.ok) throw new PortalError('could not read your relationships', res.status)
+    return (await res.json()) as { accountId: string; relationships: string[] }
+  }
+
+  /**
+   * Attach a second patient's relationship to the signed-in account with the enrolment ticket their
+   * owner approved, instead of enrolling a new authenticator for it. Same three answers as
+   * [enrollTotp], for the same reason: an attachment the server made cannot be unmade from here.
+   */
+  async attachByInvitation(session: SessionInfo, enrollTicket: string): Promise<EnrolOutcome> {
+    const res = await this.req('/v1/account/attach/invitation', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': session.csrf },
+      body: JSON.stringify({ enrollTicket }),
+    })
+    if (res.status === 204) return 'enrolled'
+    if (res.status === 400 || res.status === 401 || res.status === 409) return 'refused'
+    return 'unknown'
+  }
+
+  /** A fresh challenge to sign for attaching [relRef] by key proof: good once, for ten minutes. */
+  async attachChallenge(session: SessionInfo, relRef: string): Promise<AttachChallenge> {
+    const res = await this.req('/v1/account/attach/challenge', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': session.csrf },
+      body: JSON.stringify({ relRef }),
+    })
+    if (!res.ok) throw new PortalError('could not start attaching this relationship', res.status)
+    return (await res.json()) as AttachChallenge
+  }
+
+  /** Send the signature over the challenge. True when the relationship is now on this account. */
+  async attachByKeyProof(session: SessionInfo, challengeId: string, relRef: string, signatureB64: string): Promise<boolean> {
+    const res = await this.req('/v1/account/attach', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': session.csrf },
+      body: JSON.stringify({ challengeId, relRef, signature: signatureB64 }),
+    })
+    if (res.status === 204) return true
+    if (res.status === 401) return false
+    throw new PortalError('could not attach this relationship', res.status)
+  }
+
   // --- opaque relationship-blob channels (THERAPIST role via the session cookie) ---
 
   private relPath(relRef: string, channel: string, rest = ''): string {
@@ -340,6 +394,16 @@ export class PortalClient {
     if (!res.ok) throw new PortalError('blob store failed', res.status)
     return (await res.json()) as RelMeta
   }
+}
+
+/** What the server hands back to sign: see therapist/attachProof.ts for the message built from it. */
+export interface AttachChallenge {
+  challengeId: string
+  challenge: string
+  accountId: string
+  relRef: string
+  address: string
+  expiresAt: number
 }
 
 export interface RelMeta {

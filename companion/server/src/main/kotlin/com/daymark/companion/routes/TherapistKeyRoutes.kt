@@ -100,19 +100,11 @@ fun Route.therapistKeyRoutes(
          * The therapist publishes their two public keys. Session cookie + X-CSRF-Token, validated
          * exactly the way POST /v1/session/logout validates them.
          *
-         * THE RELREF COMES FROM THE SESSION. The one in the path is compared against it and then
-         * discarded. This is the whole authorization story of the route, so it is worth being
-         * precise about why the disagreement is a 403 and not a redirect, a warning, or a quiet
-         * preference for the session's value:
-         *
-         * A session for relationship A posting to relationship B's path is not a client that got
-         * confused about which URL to use. There is no honest way to reach it — the therapist
-         * portal builds this URL from the session it just authenticated with — so it is either a
-         * client bug that will corrupt a DIFFERENT person's relationship, or somebody probing to
-         * see whether the path is what the server actually keys on. Silently writing to the
-         * session's relRef would make both of those succeed quietly, and the second one would learn
-         * nothing while getting exactly what it wanted. Refusing outright, loudly, is the only
-         * answer that treats the request as what it is.
+         * THE ACCOUNT MUST REACH THE RELATIONSHIP IN THE PATH, asked fresh on this request
+         * (AuthStore.reaches, #314): attached to it now, the account open, the relationship not
+         * ended. Anything else is refused outright, never quietly redirected: a session reaching one
+         * relationship and posting to another is either a client bug about to corrupt a DIFFERENT
+         * person's relationship, or somebody probing what the server keys on.
          *
          * It is a 403 rather than a 401 because the caller IS authenticated and re-authenticating
          * cannot help: their session is real and simply does not reach this relationship. That is
@@ -155,12 +147,12 @@ fun Route.therapistKeyRoutes(
 
             val pathRelRef = call.parameters["relRef"]
                 ?: return@post call.respond(HttpStatusCode.BadRequest, ErrorDto("missing relRef"))
-            if (!Secrets.constantTimeEquals(session.relRef, pathRelRef)) {
+            // The account must reach the relationship it names, asked fresh on this request (#314):
+            // an unattached relationship and one that never existed get the same 403.
+            if (!authStore.reaches(session.accountId, pathRelRef)) {
                 return@post call.respond(HttpStatusCode.Forbidden, ErrorDto("session does not cover this relationship"))
             }
-            // From here on the session's relRef is the only one used. The path parameter has done
-            // its whole job by agreeing.
-            val relRef = session.relRef
+            val relRef = pathRelRef
 
             val req = call.receiveCappedJson<TherapistKeyRegistration>() ?: return@post
             val boxPub = decodePublicKey(req.boxPubB64)
@@ -362,10 +354,10 @@ fun Route.ownerKeyRoutes(
             if (!therapistLimiter.allow(call.clientAddress())) {
                 return@get call.respond(HttpStatusCode.TooManyRequests, ErrorDto("rate limited"))
             }
-            val sessionRel = validation.record.relRef
             val pathRel = call.parameters["relRef"]
                 ?: return@get call.respond(HttpStatusCode.BadRequest, ErrorDto("missing relRef"))
-            if (pathRel != sessionRel) {
+            val sessionRel = pathRel
+            if (!authStore.reaches(validation.record.accountId, pathRel)) {
                 return@get call.respond(HttpStatusCode.Forbidden, ErrorDto("session does not cover this relationship"))
             }
             val keys = authStore.ownerKeys(sessionRel)

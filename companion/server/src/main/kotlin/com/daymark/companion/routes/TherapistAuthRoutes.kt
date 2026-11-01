@@ -401,100 +401,67 @@ fun Route.therapistAuthRoutes(
                 return@post
             }
             val req = call.receiveCappedJson<TotpVerifyRequest>() ?: return@post
-            val rec = authStore.getTotp(req.credentialId)
-            if (rec == null) {
-                // Do not reveal whether the credential exists. No relRef is known, so there is
-                // nothing meaningful to key an audit entry on.
+            val rec = authStore.account(req.credentialId)
+            if (rec == null || rec.closed) {
+                // Do not reveal whether the account exists, or that it was closed. Nothing is known
+                // to key an audit entry on.
                 call.respond(HttpStatusCode.Unauthorized, ErrorDto("unauthorized"))
                 return@post
             }
+            /*
+             * The sign-in lines go to the access log of every relationship this account reaches now,
+             * because each of those owners was told their clinician's sign-ins are recorded there.
+             * Read once, before the code is checked, so a failure and a success land on the same set.
+             * A lockout is still one row per episode in each log (CLAUDE.md §4).
+             */
+            val reached = authStore.relationshipsOf(req.credentialId)
             // The store's clock, not System.currentTimeMillis(): rec.lockedUntil was WRITTEN by
-            // recordTotpFailure off the store's clock, so the question "is it still in force?"
-            // must be asked of the same clock. Under the default they are both the wall clock;
-            // when a test injects a clock, a route on a different one silently disagrees with
-            // the store about now — which made this path untestable and was a real divergence
-            // waiting for any deployment where the two opinions of time drift apart.
+            // recordTotpFailure off the store's clock, so "is it still in force?" is asked of it too.
             val now = authStore.nowMs()
             if (rec.lockedUntil > now) {
-                // Deliberately NO audit append here — the same control as the redeem route's
-                // LOCKED branch, for the same reason. credentialId is a therapist-typed username,
-                // so anyone who knows or observed it used to be able to append a LOCKOUT row to
-                // the owner's chain per request while the credential was locked, metered only by
-                // the in-memory source limiter above (which a restart clears and source rotation
-                // sidesteps). The chain never forgets a row; attacker-paced volume in it buries
-                // the one row that matters. The lockout is recorded once, at the moment it is
-                // armed — the failure path below — and probes bouncing off it write nothing.
+                // Deliberately NO audit append here. The account id is a typed sign-in name, so
+                // anyone who knows it could otherwise append a LOCKOUT row per request while it is
+                // locked. The lockout is recorded once, when it is armed, below.
                 call.respond(HttpStatusCode.TooManyRequests, ErrorDto("temporarily locked"))
                 return@post
             }
             val secretBytes = decodeSecret(rec.secretB64)
-            // A correct code is not enough — it must also be UNSPENT. consumeTotpStep is the
-            // atomic compare-and-set that makes it single-use (RFC 6238 5.2); a replayed code
-            // therefore lands on the failure path below, indistinguishable to the caller from a
-            // wrong one, and counts against the lockout like any other bad attempt.
+            // A correct code is not enough — it must also be UNSPENT. consumeTotpStep is the atomic
+            // compare-and-set that makes it single-use (RFC 6238 §5.2); a replayed code lands on the
+            // failure path below, indistinguishable from a wrong one.
             val matchedStep = secretBytes?.let { Totp.verifyStep(it, req.code, now / 1000) }
             val ok = matchedStep != null && authStore.consumeTotpStep(req.credentialId, matchedStep)
             if (!ok) {
                 val locked = authStore.recordTotpFailure(req.credentialId, totpLockoutFails, totpLockoutSeconds * 1000)
+                val action = if (locked > now) AuditAction.LOCKOUT else AuditAction.AUTH_FAIL
                 if (locked > now) {
                     call.respond(HttpStatusCode.TooManyRequests, ErrorDto("temporarily locked"))
-                    auditSafely {
-                        auditStore.append(rec.relRef, AuditActor.THERAPIST, AuditAction.LOCKOUT, meta = auditMeta(auditSourceIp, call, "credentialId" to req.credentialId))
-                    }
                 } else {
                     call.respond(HttpStatusCode.Unauthorized, ErrorDto("unauthorized"))
+                }
+                reached.forEach { rel ->
                     auditSafely {
-                        auditStore.append(rec.relRef, AuditActor.THERAPIST, AuditAction.AUTH_FAIL, meta = auditMeta(auditSourceIp, call, "credentialId" to req.credentialId))
+                        auditStore.append(rel, AuditActor.THERAPIST, action, meta = auditMeta(auditSourceIp, call, "credentialId" to req.credentialId))
                     }
                 }
                 return@post
             }
             /*
-             * THE CREDENTIAL IS CLOSED, BECAUSE THE CLINICIAN ENDED THIS RELATIONSHIP (issue #91).
-             *
-             * This is what makes self-leave an off switch rather than one browser's housekeeping.
-             * The clinician's wrapped keys live only in their own browser and the acceptance screen
-             * hands them the key record as text to keep, so without a check here a saved copy plus
-             * the passphrase plus the authenticator would still open the door from anywhere, and a
-             * clinician who needed to be certain they were out could never get there.
-             *
-             * READ AFTER THE CODE IS VERIFIED, WHICH IS THE WHOLE REASON IT CAN BE HONEST. Every
-             * other refusal on this route collapses into an identical 401 so that nobody learns
-             * whether a credential exists by guessing at one. If this check ran before the code, a
-             * distinct answer here would leak exactly that — anyone holding a credential id, which
-             * is a therapist-typed username, could ask whether its relationship had ended. Behind
-             * the code, the only caller who can reach this line is the person holding the
-             * authenticator, which is the clinician themselves. So it can say the true thing.
-             *
-             * 410 rather than 401: the credential is real, the code was right, and no amount of
-             * re-authenticating will help — the relationship is over. Re-enrolling is not offered
-             * and cannot be; the way back is a fresh invitation, which is a fresh relationship.
-             * The message names the consequence and no cause this server could not know.
-             *
-             * NO SESSION IS CREATED, and the step the code spent stays spent. Nothing else here
-             * changes: the `totp` row is untouched, as it is on every path in this file.
+             * ONE SIGN-IN FOR THE WHOLE ACCOUNT (#314). The session names the account and no
+             * relationship. Which relationships it reaches is asked on every request (AuthStore.reaches),
+             * so a relationship the clinician ended (issue #91) is refused on the data plane while the
+             * account's other relationships carry on, and the `totp`-era 410 for an ended credential
+             * is gone with the per-relationship credential it belonged to.
              */
-            if (authStore.relationshipEnding(rec.relRef) != null) {
-                call.respond(HttpStatusCode.Gone, ErrorDto("this relationship was ended"))
-                return@post
-            }
             authStore.recordTotpSuccess(req.credentialId)
             totpSourceLimiter.reset(call.clientAddress())
-            val session = authStore.createSession(req.credentialId, rec.relRef, sessionIdleSeconds, sessionAbsoluteSeconds)
-            call.response.cookies.append(
-                Cookie(
-                    name = "daymark_session",
-                    value = session.sessionId,
-                    encoding = CookieEncoding.RAW,
-                    httpOnly = true,
-                    secure = cookieSecure,
-                    path = "/",
-                    extensions = mapOf("SameSite" to "Strict"),
-                ),
-            )
+            val session = authStore.createSession(req.credentialId, sessionIdleSeconds, sessionAbsoluteSeconds)
+            call.response.cookies.append(sessionCookie(session.sessionId, cookieSecure))
             call.respond(HttpStatusCode.OK, SessionInfo(session.csrfToken, session.absoluteExpiry))
-            auditSafely {
-                auditStore.append(rec.relRef, AuditActor.THERAPIST, AuditAction.AUTH_SUCCESS, meta = auditMeta(auditSourceIp, call, "credentialId" to req.credentialId))
+            reached.forEach { rel ->
+                auditSafely {
+                    auditStore.append(rel, AuditActor.THERAPIST, AuditAction.AUTH_SUCCESS, meta = auditMeta(auditSourceIp, call, "credentialId" to req.credentialId))
+                }
             }
         }
 
@@ -542,6 +509,17 @@ internal fun auditMeta(sourceIpEnabled: Boolean, call: ApplicationCall, vararg e
     if (sourceIpEnabled) meta["sourceIp"] = call.clientAddress()
     return meta
 }
+
+/** The staff session cookie: HttpOnly, SameSite=Strict, the whole site. One place, so every route that signs in sets the same one. */
+internal fun sessionCookie(sessionId: String, secure: Boolean) = Cookie(
+    name = "daymark_session",
+    value = sessionId,
+    encoding = CookieEncoding.RAW,
+    httpOnly = true,
+    secure = secure,
+    path = "/",
+    extensions = mapOf("SameSite" to "Strict"),
+)
 
 /** Accept a secret encoded as base64url (no pad), base64, or raw utf-8 of sufficient length. */
 private fun decodeSecret(s: String): ByteArray? {

@@ -155,6 +155,14 @@ enum class AuditAction(val wire: String) {
     RELATIONSHIP_ENDED("relationship.ended"),
 
     /**
+     * The clinician attached this relationship to a sign-in account by proving the clinician key it
+     * was paired with (#314): signing a fresh server challenge with the key this relationship's owner
+     * pinned. Their access is unchanged; it is now reached through a different sign-in, and the one
+     * that held it before reaches it no more. Written once per attachment.
+     */
+    RELATIONSHIP_ATTACHED("relationship.attached"),
+
+    /**
      * The therapist published their public keys for this relationship, and the server took them.
      *
      * Read the wording carefully, because the natural reading of an audit line is that the server
@@ -319,6 +327,22 @@ enum class AuditAction(val wire: String) {
      * that, and when they do it is recorded in their chain rather than in this one.
      */
     ORG_MEMBER_REMOVED("org.member_removed"),
+
+    /**
+     * An administrator gave out a staff invitation: a one-use link that seats whoever takes it, in
+     * this practice, with the role named (#314). The link opens no content.
+     */
+    ORG_STAFF_INVITED("org.staff_invited"),
+
+    /** Somebody took a staff invitation and is now an accepted member of this practice, under their own account (#314). */
+    ORG_MEMBER_JOINED("org.member_joined"),
+
+    /**
+     * An administrator closed a member's lost account (#314). It signs in nowhere from now on, and
+     * the relationships it held are reached by nobody until their clinician re-attaches each one with
+     * their own key. Written once, on the closing.
+     */
+    ORG_ACCOUNT_CLOSED("org.account_closed"),
 
     /**
      * A member of the practice attempted a control-plane act their role does not carry, and was
