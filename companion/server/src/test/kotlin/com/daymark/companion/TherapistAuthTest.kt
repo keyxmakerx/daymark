@@ -347,7 +347,7 @@ class TherapistAuthTest {
         }
         assertEquals(HttpStatusCode.Conflict, overwrite.status)
         // The original secret still verifies (unchanged).
-        val original = auth.getTotp("legit-cred")
+        val original = auth.account("legit-cred")
         assertNotNull(original)
         assertEquals(secretB64, original.secretB64)
     }
@@ -370,7 +370,7 @@ class TherapistAuthTest {
         var now = 1_000_000L
         val dir = tmpDir()
         val auth = AuthStore(dir, clock = { now })
-        val session = auth.createSession("cred", relRef, idleSeconds = 900, absoluteSeconds = 28_800)
+        val session = auth.createSession("cred", relRef, 900L, 28_800L)
 
         // Fresh -> OK.
         assertEquals(AuthStore.SessionCheck.OK, auth.validateSession(session.sessionId, 900).check)
@@ -380,7 +380,7 @@ class TherapistAuthTest {
 
         // Absolute timeout: new session, touch within idle but pass absolute.
         now = 2_000_000L
-        val s2 = auth.createSession("cred", relRef, idleSeconds = 900, absoluteSeconds = 10)
+        val s2 = auth.createSession("cred", relRef, 900L, 10L)
         now += 5_000
         assertEquals(AuthStore.SessionCheck.OK, auth.validateSession(s2.sessionId, 900).check)
         now += 20_000

@@ -33,7 +33,8 @@ private val log = LoggerFactory.getLogger("com.daymark.companion.schema")
  * brought to: it gains what it lacks and keeps every row.
  *
  * A CHANGE ADDS A TABLE, A COLUMN OR AN INDEX, and there is no other kind: [SchemaChange] is sealed.
- * No version can rewrite, delete or re-order a row, so every audit row (insert-only and hash-chained)
+ * A new table may be filled, as it is made, from rows already in the database ([SchemaChange.Table]'s
+ * seed), which writes only the new table. No version can rewrite, delete or re-order a row, so every audit row (insert-only and hash-chained)
  * and every row of a key table stays as it was written; and nothing here touches a file but the
  * database and its copy, so no version ever reads or rewrites a blob.
  *
@@ -285,16 +286,32 @@ internal sealed class SchemaChange {
 
     abstract fun applyIfMissing(conn: Connection)
 
-    /** A table, made by [ddl], which is `CREATE TABLE IF NOT EXISTS <name> (…)`. */
-    class Table(private val ddl: String) : SchemaChange() {
+    /**
+     * A table, made by [ddl], which is `CREATE TABLE IF NOT EXISTS <name> (…)`.
+     *
+     * [seed], when there is one, is `INSERT INTO <name> … SELECT … FROM …` and runs once, in the
+     * same transaction, only when the table is made: it copies rows the database already holds into
+     * the new table. It reads the old rows and writes only the new table, so no existing row is
+     * rewritten, deleted or re-ordered (#314 makes staff accounts out of the per-relationship
+     * credentials this way).
+     */
+    class Table(private val ddl: String, private val seed: String? = null) : SchemaChange() {
         val name: String = requireNotNull(TABLE_DDL.find(ddl)?.groupValues?.get(1)) {
             "a table is made by CREATE TABLE IF NOT EXISTS <name> (…)"
+        }
+
+        init {
+            require(seed == null || SEED_SQL.find(seed)?.groupValues?.get(1) == name) {
+                "a seed is INSERT INTO <the new table> … SELECT …"
+            }
         }
 
         override fun isPresent(conn: Connection): Boolean = hasObject(conn, "table", name)
 
         override fun applyIfMissing(conn: Connection) {
-            if (!isPresent(conn)) exec(conn, ddl)
+            if (isPresent(conn)) return
+            exec(conn, ddl)
+            seed?.let { exec(conn, it) }
         }
     }
 
@@ -330,6 +347,7 @@ internal sealed class SchemaChange {
 
     private companion object {
         val TABLE_DDL = Regex("""^\s*CREATE TABLE IF NOT EXISTS (\w+)\s*\(""")
+        val SEED_SQL = Regex("""^\s*INSERT INTO (\w+)\s*\([^)]*\)\s*SELECT """)
         val INDEX_DDL = Regex("""^\s*CREATE (?:UNIQUE )?INDEX IF NOT EXISTS (\w+) ON """)
 
         fun hasObject(conn: Connection, type: String, name: String): Boolean =

@@ -104,8 +104,8 @@ of its own ([Cross‑provider sharing & referrals](#cross-provider-sharing--refe
 
 On a server that runs one practice, one person may hold the platform sysadmin role and the org admin
 role, as two separate roles (#208). That is not the god admin: neither role carries a key, and
-content still needs a patient's grant. The server administrator's own account is built (#322).
-Not built: a practice administrator's, #314.
+content still needs a patient's grant. The server administrator's own account is built (#322), and
+a practice administrator is a staff account with the administrator role (COMPANION_SECURITY.md §5.10).
 
 ## Consent model
 

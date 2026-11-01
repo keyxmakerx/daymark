@@ -28,6 +28,7 @@ import com.daymark.companion.routes.notificationRoutes
 import com.daymark.companion.routes.ownerRecoveryRoutes
 import com.daymark.companion.routes.relationRoutes
 import com.daymark.companion.routes.relationshipEndingRoutes
+import com.daymark.companion.routes.staffAccountRoutes
 import com.daymark.companion.routes.syncRoutes
 import com.daymark.companion.routes.therapistAuthRoutes
 import com.daymark.companion.routes.ownerKeyRoutes
@@ -544,6 +545,15 @@ fun Application.module(
                 auditStore = audit,
                 auditSourceIp = config.auditSourceIpEnabled,
             )
+            // A staff account's own routes (#314): its relationships, and attaching one by a fresh
+            // invitation or by a key proof. See routes/StaffAccountRoutes.kt.
+            staffAccountRoutes(
+                authStore = auth,
+                sessionIdleSeconds = config.sessionIdleSeconds,
+                auditStore = audit,
+                publicBaseUrl = config.publicBaseUrl,
+                auditSourceIp = config.auditSourceIpEnabled,
+            )
             // The CPace relay: opaque pairing blobs between the owner and a holder of the invite
             // link. The server never has the code and never parses a message — see the routes file.
             pairingRelayRoutes(
@@ -576,6 +586,9 @@ fun Application.module(
                 sessionIdleSeconds = config.sessionIdleSeconds,
                 orgAudit = orgAudit,
                 auditSourceIp = config.auditSourceIpEnabled,
+                publicBaseUrl = config.publicBaseUrl,
+                sessionAbsoluteSeconds = config.sessionAbsoluteSeconds,
+                cookieSecure = config.cookieSecure,
             )
         } else {
             practiceGroupOff()
@@ -732,6 +745,8 @@ private fun Route.clinicianGroupOff() {
     post("/v1/webauthn/{...}", groupOff)
     get("/v1/relations/{...}", groupOff)
     post("/v1/relations/{...}", groupOff)
+    get("/v1/account/{...}", groupOff)
+    post("/v1/account/{...}", groupOff)
 }
 
 /**

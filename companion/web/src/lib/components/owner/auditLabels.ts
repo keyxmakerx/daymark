@@ -46,6 +46,11 @@ const ACTION_LABELS: Record<string, string> = {
    */
   'relationship.ended': 'Ended their access to what you share',
   /*
+   * The clinician moved this relationship onto another of their own sign-ins by proving the key you
+   * paired with (#314). Their access is the same; only the sign-in it is reached through changed.
+   */
+  'relationship.attached': 'Moved your relationship to another of their sign-ins, with the key you paired',
+  /*
    * Keys moving between the two of you. Each line is a receipt for a delivery, never a statement
    * that the right keys arrived: the server relays keys and vouches for none (COMPANION_SECURITY.md
    * §9). A second send is refused whoever made it and why, and the first keys stay, so the refusal

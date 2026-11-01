@@ -155,8 +155,9 @@ export const LEAVE_TITLE = 'Leave this relationship?'
  * they were not asking at the cost of the one they need.
  */
 export const LEAVE_IS_NOT_UNDONE =
-  'Your sign-in for this person closes as soon as you confirm, on every device, and it cannot be ' +
-  'reopened. There is no way back in without a fresh invitation from them.'
+  'Your access to this person closes as soon as you confirm, on every device, and it cannot be ' +
+  'reopened. Your sign-in stays open for everyone else you work with. There is no way back in to ' +
+  'this person without a fresh invitation from them.'
 
 /** SECOND: nothing on the owner's side moves. Reassurance, so it goes after the warning. */
 export const LEAVE_TOUCHES_NOTHING_OF_THEIRS =
@@ -224,12 +225,12 @@ export const LEAVE_SERVER_REFUSED =
 
 /** The write was refused, so nothing is claimed. */
 export const LEAVE_RECORD_REMAINS =
-  'Your sign-in is closed, but this browser would not let go of the keys, so they are still on ' +
+  'Your access to this person is closed, but this browser would not let go of the keys, so they are still on ' +
   'this device. Clearing this site’s data for this browser removes them.'
 
 /** Both halves landed. A statement of what happened, not a confirmation and not a congratulation. */
 export const LEAVE_DONE =
-  'Your sign-in for this person is closed and your keys for them are gone from this browser. ' +
+  'Your access to this person is closed and your keys for them are gone from this browser. ' +
   'Nothing of theirs changed.'
 
 /**
@@ -237,7 +238,7 @@ export const LEAVE_DONE =
  * sign-out. Said rather than glossed, and without alarm: the door is already shut.
  */
 export const LEAVE_SESSION_MAY_REMAIN =
-  'Your sign-in for this person is closed and your keys for them are gone from this browser. This ' +
+  'Your access to this person is closed and your keys for them are gone from this browser. This ' +
   'browser could not confirm its own sign-out, so close the tab to finish.'
 
 /**
