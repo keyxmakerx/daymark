@@ -159,17 +159,3 @@ export const DISCONNECTED = 'Disconnected a phone.'
 export const CONSOLE_POINTER =
   "Phones pair from the Connect to your sync server card on the owner's page."
 
-/** Directly above the access-token re-issue's confirm button, always visible. */
-export const REISSUE_DISCONNECTS =
-  'Re-issuing your access token disconnects every paired phone. Each one must pair again before it ' +
-  'can sync.'
-
-/**
- * The re-issue line, with the count of connected phones when a proved connection has read it. No
- * count, or none connected, is the count-free line, which is true either way.
- */
-export function reissueLine(connectedPhones: number | null): string {
-  if (connectedPhones === null || connectedPhones < 1) return REISSUE_DISCONNECTS
-  if (connectedPhones === 1) return 'Re-issuing your access token disconnects your 1 paired phone.'
-  return `Re-issuing your access token disconnects all ${connectedPhones} paired phones.`
-}

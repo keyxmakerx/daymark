@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { PortalClient, relRefOf, requestAccessRecovery, confirmAccessRecovery } from './portal'
+import { PortalClient, relRefOf } from './portal'
 
 interface Recorded {
   url: string
@@ -100,27 +100,6 @@ describe('PortalClient notification settings', () => {
     const fetchMock = vi.fn<FetchMock>(async () => jsonResponse({}, false, 401))
     const client = new PortalClient('https://host', 'bad-token', fetchMock as unknown as typeof fetch)
     await expect(client.getNotificationSettings()).rejects.toMatchObject({ status: 401 })
-  })
-})
-
-describe('access-token recovery client functions', () => {
-  it('requestAccessRecovery posts the email and never throws, even on a non-ok response', async () => {
-    const fetchMock = vi.fn<FetchMock>(async () => jsonResponse({}, false, 429))
-    await expect(requestAccessRecovery('https://host', 'owner@example.org', fetchMock as unknown as typeof fetch)).resolves.toBeUndefined()
-    const [url, init] = fetchMock.mock.calls[0]
-    expect(url).toBe('https://host/v1/recovery/request')
-    expect(JSON.parse(init?.body as string)).toEqual({ email: 'owner@example.org' })
-  })
-
-  it('confirmAccessRecovery returns the new token on success', async () => {
-    const fetchMock = vi.fn<FetchMock>(async () => jsonResponse({ newToken: 'fresh-token-xyz' }))
-    const result = await confirmAccessRecovery('https://host', 'confirm-tok', fetchMock as unknown as typeof fetch)
-    expect(result.newToken).toBe('fresh-token-xyz')
-  })
-
-  it('confirmAccessRecovery throws PortalError when the link is gone', async () => {
-    const fetchMock = vi.fn<FetchMock>(async () => jsonResponse({}, false, 410))
-    await expect(confirmAccessRecovery('https://host', 'expired-tok', fetchMock as unknown as typeof fetch)).rejects.toMatchObject({ status: 410 })
   })
 })
 

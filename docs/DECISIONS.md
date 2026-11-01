@@ -342,7 +342,8 @@ one rule: **a phone reaches every owner route the token reaches, except the rout
 make a practice, or change how the owner recovers**, the notification address and the key documents
 among them. Those answer it 403 from one list in the code, and a route the gate cannot name is refused
 to a phone, never opened to it. A phone that could add a phone would survive its own revocation; one
-that could set the recovery address could have the console's token re-issued to whoever holds it; one
+that could set the notification address could send the notice of a recovery somewhere the owner
+never reads (#325); one
 that could write the key document could leave the owner's passphrase opening nothing.
 
 Settled with it (2026-09-26, on #186 and #189):

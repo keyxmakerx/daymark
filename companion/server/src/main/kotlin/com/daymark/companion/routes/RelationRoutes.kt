@@ -330,7 +330,7 @@ fun Route.relationRoutes(
                 // held out of the pool that serves everyone else, for as long as a slow or hanging
                 // mail server felt like taking. Still awaited rather than launched — the send
                 // completes before the handler returns, which is the ordering the notification tests
-                // observe. Fully detaching it, the way RecoveryRoutes does, is the better end state
+                // observe. Fully detaching it, the way OwnerRecoveryRoutes does, is the better end state
                 // and a behaviour change, so it is called out in the report rather than smuggled in.
                 reviewKindFor(ctx.channel)?.let { kind ->
                     val url = portalUrl(call, publicBaseUrl)

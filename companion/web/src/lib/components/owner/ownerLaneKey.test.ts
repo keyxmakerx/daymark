@@ -47,12 +47,12 @@ describe('the door hands the console the lane key of the master it opened', () =
 
   it('opens the console only with the key beside the identity, and hands it over in the session', () => {
     const enter = unlock.slice(unlock.indexOf('function enter()'))
-    expect(enter).toContain('if (!ownerIdentity || !readWith || !laneKey) return')
-    expect(enter).toContain('lane: laneKey }, readWith)')
+    expect(enter).toContain('if (!ownerIdentity || !readWith || !laneKey || !recoveryPublicKey) return')
+    expect(enter).toContain('lane: laneKey, recoveryPublicKey }')
   })
 
   it('the set-up form hands the key on with the identity, and the Recovery code screen, which keeps no console, wipes it at once', () => {
-    expect(setUpForm).toContain('onstored({ recoveryCode: out.recoveryCode, identity: out.identity, lane: out.lane })')
+    expect(setUpForm).toContain('onstored({ recoveryCode: out.recoveryCode, identity: out.identity, lane: out.lane, recoveryPublicKey: out.recoveryPublicKey })')
     const stored = newCode.slice(newCode.indexOf('async function keyStored('), newCode.indexOf('function keyUnread('))
     expect(stored).toContain('stored.lane.syncKey.fill(0)')
   })

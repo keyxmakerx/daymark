@@ -67,7 +67,7 @@
      * `lane` is the sync key of the same master, for the owner console's lane (#345), which a caller
      * that keeps no console wipes at once.
      */
-    onstored: (stored: { recoveryCode: RecoveryCode; identity: Identity; lane: LaneKey }) => void
+    onstored: (stored: { recoveryCode: RecoveryCode; identity: Identity; lane: LaneKey; recoveryPublicKey: Uint8Array }) => void
     /**
      * The server took the key and it could not be read back. The code is for the caller to show once
      * all the same, with READ_BACK_FAILED; `sent` is what to compare a later read against.
@@ -108,7 +108,7 @@
       const out = await setUp(ports, held, passphrase, asksTwice ? repeated : null)
       if (out.kind === 'stored') {
         forgetTypedPassphrases()
-        onstored({ recoveryCode: out.recoveryCode, identity: out.identity, lane: out.lane })
+        onstored({ recoveryCode: out.recoveryCode, identity: out.identity, lane: out.lane, recoveryPublicKey: out.recoveryPublicKey })
       } else if (out.kind === 'storedUnread') {
         forgetTypedPassphrases()
         onunread({ recoveryCode: out.recoveryCode, sent: out.sent })

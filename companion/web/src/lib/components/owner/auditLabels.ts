@@ -70,6 +70,7 @@ const ACTION_LABELS: Record<string, string> = {
    * credential" and "Revoke". The access token signs nobody in after the first row.
    */
   'owner.account_created': 'Made your own sign-in; the access token stopped working',
+  'owner.recovered': 'Got back in with the recovery code and made a new sign-in; every earlier sign-in was signed out',
   'cli.issued': 'Made a command-line writer credential',
   'cli.revoked': 'Revoked a command-line writer credential',
 }

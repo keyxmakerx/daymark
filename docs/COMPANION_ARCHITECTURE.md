@@ -96,16 +96,15 @@ is a side effect.
 | **Operator** (runs the container; often the owner) | The host, the environment, the logs | Keeping it running. Holding the host is not holding anyone's key |
 | **Practice administrator** | Membership and roles, on the control plane | Administration. No role, the administrator's included, reaches anyone's credentials, keys or content (#288) |
 
-- **The owner has no account yet.** The owner's credential is the bearer token
-  (`DAYMARK_AUTH_TOKEN`), stored on the server as a digest. An optional recovery email can rotate it
-  (COMPANION_SECURITY.md §6); it is registered in the owner console's Notifications tab, or, on a
-  solo server, on the "Recover access" card; it recovers server access only, never the passphrase.
+- **The owner's first credential is the bearer token** (`DAYMARK_AUTH_TOKEN`), stored on the server
+  as a digest and changed only where the server is installed (COMPANION_SECURITY.md §6). No email can
+  rotate it. Once the owner makes an account, the token signs nobody in.
 - **Everyone signs in as themselves** (#208). The owner, an administrator, each clinician and each
-  receptionist has an account of their own, and the shared token stops being anyone's sign-in (not
-  built: #324, #314). A new server is claimed with a one-time setup code it prints to its own log,
+  receptionist has an account of their own, and the shared token stops being anyone's sign-in. The
+  owner's is built (COMPANION_SECURITY.md §5.9); staff accounts are not built: #314. A new server is claimed with a one-time setup code it prints to its own log,
   and the server console sits behind an administrator's own sign-in, a name and a six-digit code
-  (#322). A lost sign-in comes back by proving the owner's own key, never by
-  email (not built: #325).
+  (#322). A lost owner sign-in comes back by proving the owner's recovery key, derived from the
+  master the recovery code opens, never by email (#325, COMPANION_SECURITY.md §5.9).
 - **Clinicians sign in with a six-digit TOTP code** and a session cookie. Passkeys sign people in
   where the address is `https` with a hostname, codes stay as the fallback, and a passkey never
   unlocks a key (#205). Not built: #326; the server's WebAuthn routes answer 501.
@@ -127,13 +126,13 @@ Kotlin and Ktor, in a non-root, read-only, distroless container with no outbound
 | `pairing.db` | Pairing runs: two CPace messages and two sealed envelopes each |
 | `audit.db`, `org-audit.db` | The owner-readable access log and the practice's control-plane log, each a hash chain |
 | `org.db` | Practices and memberships |
-| `owner-account.db` | The owner token's digest, the notification address, recovery-link state; the owner's id, the paired phones' keys and revocations, pairing codes and used nonces |
+| `owner-account.db` | The owner token's digest, the notification address; the owner's id, the paired phones' keys and revocations, pairing codes and used nonces; the owner's sign-in, sessions, CLI credentials, recovery public key and recovery challenges |
 | `owner-audit.db` | The owner's own log: phones paired and revoked, and lockouts of an owner credential |
 
 Route groups: sync (`/v1/keyparams`, `/v1/keydoc`, `/v1/snapshots`); relationship channels (`/v1/rel/…`);
 invitations, pairing and sign-in (`/v1/invite…`, `/v1/relations/{relRef}/pairing…`, `/v1/totp/…`);
-keys, endings and the access log (`/v1/relations/{relRef}/…`); owner notifications and access recovery
-(`/v1/owner/notifications`, `/v1/recovery/…`); paired phones and the owner's log (`/v1/devices…`,
+keys, endings and the access log (`/v1/relations/{relRef}/…`); owner notifications, the owner's
+account and recovery by key (`/v1/owner/notifications`, `/v1/owner/account`, `/v1/owner/recovery…`); paired phones and the owner's log (`/v1/devices…`,
 `/v1/owner/audit`); practices (`/v1/orgs…`); and the unauthenticated
 `/healthz`, `/readyz` and `/v1/config`.
 

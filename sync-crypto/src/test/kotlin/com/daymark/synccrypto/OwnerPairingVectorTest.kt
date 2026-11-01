@@ -29,6 +29,15 @@ class OwnerPairingVectorTest {
     }
 
     @Test
+    fun `master bytes 0 to 31 give the recovery key the web pins, which is neither identity key`() {
+        val recovery = SyncCrypto.toBase64(crypto.ownerRecoveryPublicKey(master0to31))
+        assertEquals("lCOQjQ7t587Ojhl-HRl7Dz5LhZoYXBaMo1s0TGnjDfU", recovery)
+        val id = crypto.ownerIdentityFromMaster(master0to31)
+        assertNotEquals(SyncCrypto.toBase64(id.signPublicKey), recovery)
+        assertNotEquals(SyncCrypto.toBase64(id.boxPublicKey), recovery)
+    }
+
+    @Test
     fun `the identity is a function of the master and of nothing else`() {
         val a = crypto.ownerIdentityFromMaster(master0to31)
         val b = crypto.ownerIdentityFromMaster(master0to31.copyOf())

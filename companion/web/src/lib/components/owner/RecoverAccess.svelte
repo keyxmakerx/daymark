@@ -1,26 +1,38 @@
 <script lang="ts">
   /*
-   * The owner's email, recovery half (COMPANION_SECURITY.md §6, "Owner notifications and
-   * server-access recovery"): the unauthenticated owner-access-token recovery flow. This
-   * recovers SERVER ACCESS ONLY — the server is zero-knowledge and can never reset the PIN or
-   * E2EE passphrase; a recovered token still cannot decrypt anything. Deliberately requires no
-   * login: that is the point of a recovery path.
+   * THE RECOVER CARD (COMPANION_SECURITY.md §5.9): getting back in with the recovery code, and the
+   * email that is told when someone does.
    *
-   * AND, ON A SOLO SERVER, THE ONE PLACE TO REGISTER THE ADDRESS IT SENDS TO (#330). The address
-   * is set through the owner route the owner console's Notifications tab uses, and a solo shape
-   * withholds that console while still serving the route. So where the console is withheld this
-   * card holds the setting — with the access token the sync card proved, never a second prompt for
-   * it — and where the console is offered, it points there. Every word and every branch comes from
+   * GETTING BACK IN (#325). The owner types their recovery code, a new name and a new authenticator.
+   * owner/recoverSignIn.ts asks for a challenge, opens the wrapped key's recovery slot with the code,
+   * signs the challenge for this page's own origin and sends only the signature. The server replaces
+   * the sign-in and signs out every earlier one. No URL field: the proof is bound to this origin,
+   * and the session it starts is a cookie for this origin alone. The code is checked group by group
+   * before anything is fetched (components/recovery/groups.ts), and cleared, with the authenticator
+   * key zeroed, once the sign-in is replaced.
+   *
+   * THE EMAIL (#330). On a solo server, the one place to register the address notices go to: the
+   * address is set through the owner route the owner console's Notifications tab uses, and a solo
+   * shape withholds that console while still serving the route. So where the console is withheld this
+   * card holds the setting — with the connection the sync card proved, never a second prompt for it —
+   * and where the console is offered, it points there. Every word and every branch comes from
    * lib/owner/recoveryEmail.ts, where each state is a node test.
    */
-  import { requestAccessRecovery, confirmAccessRecovery, PortalClient } from '../../sync/portal'
+  import { PortalClient } from '../../sync/portal'
   import type { OwnerRouteId } from '../../onboarding/audience'
   import {
+    BACK_IN,
     BEFORE_YOU_NEED_IT,
+    CODE_STAYS_HERE,
+    DIGITS_LABEL,
     EMAIL_LABEL,
     EMAIL_STORED_NOTE,
-    EMAIL_MISSING,
+    GET_BACK_IN,
+    GETTING_BACK_IN,
     LOAD_FAILED,
+    NEW_AUTHENTICATOR,
+    NEW_AUTHENTICATOR_LEDE,
+    NEW_NAME_LABEL,
     REGISTER,
     REMOVE,
     SAVE_FAILED,
@@ -29,31 +41,31 @@
     registeredStatement,
     type OwnerConnection,
   } from '../../owner/recoveryEmail'
+  import { ownerAccountApi, type OwnerAccountApi } from '../../owner/account'
+  import { proveRecovery } from '../../owner/recoveryKey'
+  import { recoverSignIn } from '../../owner/recoverSignIn'
+  import { base32, groupSecret, newSeed, otpauthUri, validName, validTotp } from '../../admin/claim'
+  import { qrDrawing } from '../../phones/qr'
+  import GroupEntry from '../recovery/GroupEntry.svelte'
+  import { emptyGroups, firstGroupProblem, groupsToTyped, type GroupProblem } from '../recovery/groups'
+  import { HOW_ENTRY_WORKS } from '../recovery/copy'
   import { Card, Callout } from '../ui'
-  import { devicesApi, sameServer } from '../../phones/devices'
-  import { reissueLine } from '../../phones/copy'
 
   let {
     /** Whether the owner's page offers the owner console (`offersRoute('owner', …)`). */
     ownerConsoleOffered = true,
-    /** The server address and access token a sync fetch proved this visit, or null. */
+    /** The server address and credential a sync fetch proved this visit, or null. */
     connection = null,
     /** Opens another of the owner's entry points: the sync card, or the owner console. */
     onopen = undefined,
+    /** This page's own server's account routes; a test or a story may hand in another. */
+    api = ownerAccountApi(),
   }: {
     ownerConsoleOffered?: boolean
     connection?: OwnerConnection | null
     onopen?: (route: OwnerRouteId) => void
+    api?: OwnerAccountApi
   } = $props()
-
-  let serverUrl = $state('')
-  let email = $state('')
-  let confirmToken = $state('')
-  let newToken = $state('')
-  let requestStatus = $state('')
-  let confirmStatus = $state('')
-  let busy = $state(false)
-  let error = $state('')
 
   /* The registration half. `registered` is what the server last said, never what was typed. */
   let registered = $state<string | null>(null)
@@ -66,8 +78,8 @@
   const uid = $props.id()
 
   /*
-   * Read the registered address once the card holds the setting and has a token to ask with. The
-   * effect reads only the two props; what it writes is state it never reads, so the write cannot
+   * Read the registered address once the card holds the setting and has a connection to ask with.
+   * The effect reads only the two props; what it writes is state it never reads, so the write cannot
    * re-run it, and a connection that changes mid-flight cancels the answer meant for the old one.
    */
   $effect(() => {
@@ -80,36 +92,6 @@
         if (!cancelled) registered = settings.email
       } catch {
         if (!cancelled) setupError = LOAD_FAILED
-      }
-    })()
-    return () => {
-      cancelled = true
-    }
-  })
-
-  /*
-   * RE-ISSUING THE TOKEN DISCONNECTS EVERY PAIRED PHONE (#431), so the line saying so stands directly
-   * above the button that re-issues it, always. With a connection this visit proved, the phones still
-   * connected are counted and the line names how many; with none, or when the count cannot be read,
-   * the count-free line stands, which is true either way. The count is shown only while this card's
-   * own Server URL names the server it was read from (#434). The effect reads only the prop, and what
-   * it writes it never reads.
-   */
-  let connectedPhones = $state<number | null>(null)
-  const countApplies = $derived(connection !== null && sameServer(serverUrl, connection.serverUrl, location.origin))
-  const reissue = $derived(reissueLine(countApplies ? connectedPhones : null))
-
-  $effect(() => {
-    const c = connection
-    connectedPhones = null
-    if (!c) return
-    let cancelled = false
-    void (async () => {
-      try {
-        const phones = await devicesApi(c.serverUrl, c.token).listDevices()
-        if (!cancelled) connectedPhones = phones.filter((p) => p.revokedAt === null).length
-      } catch {
-        /* no count: the count-free line stands */
       }
     })()
     return () => {
@@ -132,60 +114,54 @@
     }
   }
 
-  // Progressive enhancement: a confirm link lands on this page as `#t=<token>`; prefill it.
-  if (typeof window !== 'undefined') {
-    const match = /(?:^|[#&])t=([^&]+)/.exec(window.location.hash)
-    if (match) confirmToken = decodeURIComponent(match[1])
+  /* The getting-back-in half. */
+  let groups = $state(emptyGroups())
+  let problem = $state<GroupProblem | null>(null)
+  let name = $state('')
+  let digits = $state('')
+  let seed = $state<Uint8Array | null>(newSeed())
+  let busy = $state(false)
+  let fault = $state('')
+  let backIn = $state(false)
+
+  const host = typeof location === 'undefined' ? '' : location.host
+  const secret = $derived(seed ? base32(seed) : '')
+  const qr = $derived(secret ? qrDrawing(otpauthUri(secret, host, 'owner')) : null)
+  const ready = $derived(validName(name) && validTotp(digits) && seed !== null)
+
+  function updateGroups(next: string[]) {
+    groups = next
+    problem = null
+    fault = ''
   }
 
-  async function request() {
-    error = ''
-    requestStatus = ''
-    if (!email.trim()) {
-      error = EMAIL_MISSING
+  async function getBackIn(event: SubmitEvent) {
+    event.preventDefault()
+    if (!seed || !ready || busy) return
+    const found = firstGroupProblem(groups)
+    if (found) {
+      problem = found
       return
     }
+    problem = null
+    fault = ''
     busy = true
     try {
-      // requestAccessRecovery never inspects the server's response status (the server always
-      // replies 202 regardless of match, by design) — the only way this throws is a genuine
-      // network-level failure (unreachable server, bad URL), which is safe to surface distinctly
-      // without leaking anything about whether the email matched.
-      await requestAccessRecovery(serverUrl, email.trim())
-      requestStatus = 'If that email is registered, a recovery link was sent. Check your inbox.'
-    } catch {
-      error = 'Could not reach that server. Check the server URL and try again.'
+      const out = await recoverSignIn(
+        { recoveryChallenge: () => api.recoveryChallenge(), prove: proveRecovery, recover: (req) => api.recover(req) },
+        { typedCode: groupsToTyped(groups), address: location.origin, name, seed, totpCode: digits },
+      )
+      if (!out.ok) {
+        fault = out.message
+        return
+      }
+      seed.fill(0)
+      seed = null
+      groups = emptyGroups()
+      digits = ''
+      backIn = true
     } finally {
       busy = false
-    }
-  }
-
-  async function confirm() {
-    error = ''
-    confirmStatus = ''
-    newToken = ''
-    if (!confirmToken.trim()) {
-      error = 'Paste the confirmation token from your recovery email link.'
-      return
-    }
-    busy = true
-    try {
-      const result = await confirmAccessRecovery(serverUrl, confirmToken.trim())
-      newToken = result.newToken
-      confirmStatus = 'Your access token was re-issued. Copy it now — it is shown only once.'
-    } catch (e) {
-      error = e instanceof Error ? e.message : 'That recovery link is invalid, expired, or already used.'
-    } finally {
-      busy = false
-    }
-  }
-
-  async function copyToken() {
-    if (!newToken) return
-    try {
-      await navigator.clipboard.writeText(newToken)
-    } catch {
-      /* clipboard access denied; the token is still selectable/visible in the field */
     }
   }
 </script>
@@ -199,8 +175,9 @@
       <section class="part" aria-labelledby="{uid}-before">
         <h3 id="{uid}-before">{BEFORE_YOU_NEED_IT}</h3>
         {#if view.setup.kind === 'register'}
-          <!-- Solo, with a token: this card holds the setting. -->
+          <!-- Solo, with a connection: this card holds the setting. -->
           <p class="para">{view.setup.lede}</p>
+          <p class="hint">{view.setup.note}</p>
           {#if view.setup.registered}<p class="status">{registeredStatement(view.setup.registered)}</p>{/if}
           <label class="field">
             <span>{EMAIL_LABEL} <em>({EMAIL_STORED_NOTE})</em></span>
@@ -214,9 +191,9 @@
           </div>
         {:else}
           <!--
-            A pointer and a link: to the sync card, where a solo server's token is proved, or to the
-            owner console, which holds the setting wherever it is offered. The view decides which, so
-            a solo page never names the console.
+            A pointer and a link: to the sync card, where a solo server's connection is proved, or to
+            the owner console, which holds the setting wherever it is offered. The view decides which,
+            so a solo page never names the console.
           -->
           <p class="para">{view.setup.text}</p>
           {#if onopen}
@@ -230,47 +207,67 @@
       <section class="part" aria-labelledby="{uid}-lost">
         <h3 id="{uid}-lost">{view.lostHeading}</h3>
         {#each view.lostLede as line (line)}<p class="para">{line}</p>{/each}
-        <p class="hint">
-          This recovers <strong>server access only</strong> — it cannot restore your PIN or your
-          end-to-end-encryption passphrase, and it cannot decrypt anything on its own.
-        </p>
 
-        <label class="field">
-          <span>Server URL <em>(blank = this server)</em></span>
-          <input type="url" bind:value={serverUrl} placeholder="https://daymark.example.com" autocomplete="off" />
-        </label>
-
-        <fieldset class="step">
-          <legend>1. Request a recovery link</legend>
-          <label class="field">
-            <span>Registered email</span>
-            <input type="email" bind:value={email} placeholder="you@example.com" autocomplete="off" />
-          </label>
-          <button class="primary" onclick={request} disabled={busy}>{busy ? 'Requesting…' : 'Send recovery link'}</button>
-          {#if requestStatus}<p class="status">{requestStatus}</p>{/if}
-        </fieldset>
-
-        <fieldset class="step">
-          <legend>2. Confirm the link</legend>
-          <label class="field">
-            <span>Confirmation token <em>(from the link in your email)</em></span>
-            <input type="text" bind:value={confirmToken} autocomplete="off" />
-          </label>
-          <!-- Directly above the button that re-issues the token, always: what it does to the phones. -->
-          <p class="para reissue">{reissue}</p>
-          <button class="primary" onclick={confirm} disabled={busy}>{busy ? 'Confirming…' : 'Confirm and re-issue'}</button>
-          {#if confirmStatus}<p class="status">{confirmStatus}</p>{/if}
-          {#if newToken}
-            <label class="field">
-              <span>New owner access token <em>(shown once — save it now)</em></span>
-              <input type="text" readonly value={newToken} aria-label="New owner access token" />
-            </label>
-            <button onclick={copyToken}>Copy token</button>
+        {#if backIn}
+          <p class="status" role="status">{BACK_IN}</p>
+          {#if onopen}
+            {@const after = view.afterRecovery}
+            <button class="go" type="button" onclick={() => onopen?.(after.route)}>{after.label}</button>
           {/if}
-        </fieldset>
-      </section>
+        {:else}
+          <form class="part" onsubmit={getBackIn}>
+            <p class="hint">{HOW_ENTRY_WORKS}</p>
+            <GroupEntry
+              {groups}
+              onchange={updateGroups}
+              problemGroup={problem?.group ?? null}
+              describedBy="{uid}-code-message"
+              disabled={busy}
+              legend="The six groups of your recovery code"
+            />
+            <p class="hint">{CODE_STAYS_HERE}</p>
+            <div id="{uid}-code-message" role="status" aria-live="polite">
+              {#if problem}
+                <Callout tone="warn" title={problem.message}>
+                  {#if problem.detail}<p class="para">{problem.detail}</p>{/if}
+                </Callout>
+              {/if}
+            </div>
 
-      {#if error}<Callout tone="critical">{error}</Callout>{/if}
+            <label class="field">
+              <span>{NEW_NAME_LABEL}</span>
+              <input type="text" autocomplete="username" maxlength="64" bind:value={name} />
+            </label>
+
+            <fieldset class="step">
+              <legend>{NEW_AUTHENTICATOR}</legend>
+              <p class="hint">{NEW_AUTHENTICATOR_LEDE}</p>
+              {#if qr}
+                <div class="seed">
+                  <!-- Hidden from assistive technology: its text alternative is the key printed beside it. -->
+                  <div class="qr-tile">
+                    <svg class="qr" viewBox="0 0 {qr.extent} {qr.extent}" aria-hidden="true" focusable="false" shape-rendering="crispEdges">
+                      <rect class="qr-paper" width={qr.extent} height={qr.extent} />
+                      <path class="qr-ink" d={qr.path} />
+                    </svg>
+                  </div>
+                  <div class="key" aria-label="Authenticator key, in groups of four">
+                    {#each groupSecret(secret) as group, i (i)}<span class="group">{group}</span>{/each}
+                  </div>
+                </div>
+              {/if}
+            </fieldset>
+
+            <label class="field">
+              <span>{DIGITS_LABEL}</span>
+              <input class="digits" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="7" bind:value={digits} />
+            </label>
+
+            {#if fault}<Callout tone="warn">{fault}</Callout>{/if}
+            <button class="primary" type="submit" disabled={!ready || busy}>{busy ? GETTING_BACK_IN : GET_BACK_IN}</button>
+          </form>
+        {/if}
+      </section>
     </div>
   </Card>
 </div>
@@ -286,9 +283,21 @@
   .field { display: flex; flex-direction: column; gap: var(--space-1); font-size: 0.85rem; }
   .field em { color: var(--text-subtle); font-style: normal; }
   input { font: inherit; padding: var(--space-2) var(--space-3); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--paper-bg); color: var(--ink-text); }
-  input[readonly] { font-family: var(--font-mono); font-size: 0.8rem; }
   .step { display: flex; flex-direction: column; gap: var(--space-3); border: 1px solid var(--hairline); border-radius: var(--radius-sm); padding: var(--space-3); }
   .step legend { padding: 0 var(--space-2); color: var(--ink-soft); font-size: 0.85rem; }
+  .seed { display: flex; flex-wrap: wrap; align-items: flex-start; gap: var(--space-4); }
+  .qr-tile {
+    max-width: 100%;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    background: var(--scan-paper);
+    line-height: 0;
+  }
+  .qr { display: block; width: 11rem; height: 11rem; max-width: 100%; }
+  .qr-paper { fill: var(--scan-paper); }
+  .qr-ink { fill: var(--scan-ink); }
+  .key { flex: 1 1 10rem; min-width: 0; display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-2); }
+  .group, .digits { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
   /* Confirmation, never green: solid-ink family only. A recovery that worked is stated in
      words — the product has no success hue to spend here. */
   .status { margin: 0; font-size: 0.85rem; color: var(--ink-soft); }

@@ -59,11 +59,12 @@ const val ACCOUNT_ONLY_MESSAGE = "sign in to your account in the owner console t
  * credentials it mints.
  *
  * MAKING IT. `POST /v1/owner/account` takes the shared token, once, on an install that predates
- * accounts: a name, a fresh TOTP seed and six digits proving the authenticator holds it. The account
+ * accounts: a name, a fresh TOTP seed, six digits proving the authenticator holds it, and the public
+ * half of the owner's recovery key (OwnerRecoveryRoutes), without which nothing is made. The account
  * takes the owner's one id, so every stored snapshot, key document, relationship and paired phone is
  * already its own and nothing is moved. The insert is the token's retirement: from that transaction
- * on, OwnerAuth refuses the token on every owner route with the same 401 as a wrong one, and the
- * emailed token reset answers 404 (RecoveryRoutes). A second account is refused.
+ * on, OwnerAuth refuses the token on every owner route with the same 401 as a wrong one. A second
+ * account is refused.
  *
  * SIGNING IN is the administrator's shape (#322): the name and a current code, one answer for every
  * refusal so a stranger learns no name, a lockout after repeated wrong codes with one audit row on

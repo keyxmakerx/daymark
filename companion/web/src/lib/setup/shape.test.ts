@@ -1048,11 +1048,6 @@ describe('the returning-person strip', () => {
     expect(CONFIGURATION_IS_NOT_RE_READ).toMatch(/does not read/i)
     expect(CONFIGURATION_IS_NOT_RE_READ).toMatch(/reopened/i)
   })
-
-  it('states the recovery-link bypass instead of leaving the machine looking set up', () => {
-    expect(strip).toContain('RECOVERY_LINK_BYPASS')
-    expect(strip).toContain('{:else if bypassed}')
-  })
 })
 
 describe('the practice placeholder panel', () => {
@@ -1108,12 +1103,11 @@ describe('App.svelte gates on the decision rather than on a flag of its own', ()
     expect(app).toContain('<ShapeStrip')
   })
 
-  it('never lets a recovery link meet the setup question', () => {
-    // An emailed access-token link is followed by someone who has already lost something. The
-    // gate is closed for that visit, and the strip says the question was deferred rather than
-    // answered.
-    expect(app).toContain('startedOnRecoveryLink')
-    expect(app).toMatch(/!startedOnRecoveryLink && \(decision\.state === 'reading' \|\| decision\.state === 'ask'\)/)
+  it('opens the gate on the decision alone: no link in the address skips the question (#325)', () => {
+    expect(app).toContain("const setupGateOpen = $derived(decision.state === 'reading' || decision.state === 'ask')")
+    // Control: the old bypass, put back, is seen.
+    expect("$derived(!startedOnRecoveryLink && (decision.state === 'reading'").toMatch(/startedOnRecoveryLink/)
+    expect(app).not.toMatch(/startedOnRecoveryLink|location\.hash/)
   })
 
   it('lands on a shape’s surface once per shape, not once per page', () => {

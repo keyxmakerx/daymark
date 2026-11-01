@@ -18,8 +18,8 @@ data class NotificationSettings(val email: String?, val events: Set<MailMessage.
  * registered notification email + per-event preferences, the digest of the accepted owner/bearer
  * token (durable across restarts, changed only by the operator's `DAYMARK_AUTH_TOKEN`), the owner's
  * own account ([signIn]) and the phones paired to the owner. Nothing here sends a token by email:
- * the emailed re-issue is gone, and getting back in proves the owner's own key (#325). The
- * `reissue_confirm` table it used stays in version 1 of the schema, unread. One SQLite file per data
+ * getting back in proves the owner's own key (#325). Version 1 of the schema still creates the
+ * `reissue_confirm` table, and nothing reads or writes it. One SQLite file per data
  * dir, independent of the therapist-portal feature flag — the bearer token also gates the plain
  * sync API, which does not need the portal.
  *
@@ -59,7 +59,7 @@ class OwnerAccountStore(
 
     /**
      * The owner's id and the phones registered to it (#186, #189), on this database's connection and
-     * under its lock, so a re-issued token and the revocation of every device are one transaction.
+     * under its lock, so a changed token and the revocation of every device are one transaction.
      */
     val devices: DeviceKeyStore
 
@@ -95,10 +95,9 @@ class OwnerAccountStore(
      * - First boot ever (no row): seed both `token` and `bootstrap_token` from the env value's
      *   digest.
      * - Operator changed the env var since last boot (redeploy-with-a-new-secret-file, the
-     *   rotation method already documented in COMPANION_DEPLOYMENT.md): the env value WINS,
-     *   overwriting any since-rotated token — the operator's explicit action takes precedence.
-     * - Env var unchanged since last boot: keep whatever is stored, including a token rotated at
-     *   runtime via [rotateToken] (so the email-recovery flow survives a restart).
+     *   rotation method documented in COMPANION_DEPLOYMENT.md): the env value's digest is stored.
+     *   This is the only way the token changes: nothing re-issues it at runtime (#325).
+     * - Env var unchanged since last boot: keep what is stored.
      *
      * **Migration note (issue #113):** a deployment upgraded from before this change has a
      * *plaintext* value sitting in `bootstrap_token`. A digest can never equal that plaintext
@@ -107,9 +106,7 @@ class OwnerAccountStore(
      * columns from the current env value's digest — exactly the re-hash-on-next-bootstrap
      * behaviour this migration wants. This is safe, never a lockout: `DAYMARK_AUTH_TOKEN` is the
      * operator's own secret and is unchanged by this deploy, so it still authorises after the
-     * reseed. The one side effect is that a token rotated at runtime (via the email-recovery
-     * flow) before the upgrade does not survive this specific boot — the server reverts to
-     * accepting the operator's env-var token, which the operator can always still present.
+     * reseed.
      */
     private fun bootstrapToken(envToken: String): List<String> {
         val envHash = Secrets.tokenHash(envToken)
@@ -126,8 +123,8 @@ class OwnerAccountStore(
             }
             return emptyList()
         }
-        // A token the operator sets is a re-issue like the emailed one, and disconnects every paired
-        // phone in the same transaction (#186). A first start has none to disconnect.
+        // A token the operator sets is a re-issue, and disconnects every paired phone in the same
+        // transaction (#186). A first start has none to disconnect.
         return conn.inTransaction {
             val revoked = devices.revokeAllLocked(devices.ownerId)
             conn.prepareStatement(

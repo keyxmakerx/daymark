@@ -146,7 +146,7 @@ data class Config(
 
     /**
      * True when links to this server leave it: the clinician portal hands the owner invitation
-     * links, and outbound email carries notification and recovery links. Either one makes
+     * links, and outbound email carries notification links. Either one makes
      * [publicBaseUrl] required at start (#180), whichever setting switched the portal on (#330).
      */
     val buildsLinks: Boolean get() = shape.clinicianGroup || smtpEnabled

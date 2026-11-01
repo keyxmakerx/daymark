@@ -216,7 +216,7 @@
           is a same-origin cookie, which a console pointed at another server would never send.
         -->
         {#if client && serverUrl.trim() === ''}
-          <OwnerAccountPanel credential={token} onsignedin={signedIn} onsignedout={lock} />
+          <OwnerAccountPanel credential={token} recoveryPublicKey={session?.recoveryPublicKey ?? null} onsignedin={signedIn} onsignedout={lock} />
         {/if}
         <!-- Phones pair on every kind of server, so from the sync card, not from here (#431). -->
         <p class="cpointer">{CONSOLE_POINTER}</p>

@@ -32,7 +32,6 @@
     CONFIGURATION_IS_NOT_RE_READ,
     FORGET_REFUSED,
     LABELS,
-    RECOVERY_LINK_BYPASS,
     STORAGE_REFUSED,
     configuredHowToChange,
     configuredStatement,
@@ -43,7 +42,7 @@
   } from '../../setup/shape'
 
   let {
-    /** The resolved decision. Rendered for `chosen` and `configured`; `ask` only when bypassed. */
+    /** The resolved decision. Rendered for `chosen` and `configured`. */
     decision,
     /** Reopens the first-run screen. Absent — or with a configured decision — no control shows. */
     onchange = undefined,
@@ -53,19 +52,12 @@
     storageRefused = false,
     /** The browser would not remove the stored answer, so claiming it is gone would be a lie. */
     forgetRefused = false,
-    /**
-     * Set when this visit arrived on a recovery link. The setup question is deferred, not
-     * answered, and the strip says which of those it is rather than leaving the machine looking
-     * set up when it is not.
-     */
-    bypassed = false,
   }: {
     decision: SetupDecision
     onchange?: () => void
     onopenpractice?: () => void
     storageRefused?: boolean
     forgetRefused?: boolean
-    bypassed?: boolean
   } = $props()
 
   const shape = $derived(
@@ -132,22 +124,6 @@
         <p class="para opens">{CONFIGURATION_IS_NOT_RE_READ}</p>
       {/if}
     </details>
-  {:else if bypassed}
-    <!--
-      A recovery link beats the setup question. Somebody following one is already having a bad
-      day, and a first-run screen standing between them and their own access would be the exact
-      failure this slice is under instruction to avoid.
-    -->
-    <Callout tone="info" title={LABELS.shapeStrip}>
-      <p class="para">{RECOVERY_LINK_BYPASS}</p>
-      {#if onchange}
-        <p class="para">
-          <button class="action" type="button" onclick={() => onchange?.()}>
-            {LABELS.changeShape}
-          </button>
-        </p>
-      {/if}
-    </Callout>
   {/if}
 
   {#if storageRefused}
