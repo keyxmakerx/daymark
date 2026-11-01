@@ -194,8 +194,9 @@ describe('the owner page says one true thing about where data goes (#273)', () =
   const INDEX = read('../../../index.html')
   const CLAIM = 'Your entries leave this browser only when you sync or share them.'
   const ACCOUNT =
-    'This tab sends data to your server. Account actions send identifiers, and recovery sends the ' +
-    "email address you type. A share you seal leaves this browser too, as ciphertext sealed to one " +
+    'This tab sends data to your server. Account actions send identifiers, and the email address you ' +
+    'register. Getting back in sends a proof made with your recovery code, never the code. A share ' +
+    "you seal leaves this browser too, as ciphertext sealed to one " +
     "clinician's pinned key: the server can see that it exists and how big it is, not what is in " +
     'it. Your passphrase stays in this browser.'
 

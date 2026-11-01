@@ -1,11 +1,7 @@
 package com.daymark.app.ui.support
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
@@ -14,7 +10,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -40,13 +35,14 @@ import com.daymark.app.util.Haptics
 
 /**
  * "Take a moment" — a calm, full-screen, gently-animated space offered (never forced) after a low
- * mood. Validates first, the options softly float in, and every path is optional. No cheering, no
+ * mood. Validates first, the options fade in once, and every path is optional. No cheering, no
  * generic affirmations. Non-diagnostic general wellness.
  *
- * The option list is the Signals engine's Support menu (rules-based, no AI): ranked and lightly
- * personalised — e.g. "Move a little" rises to the top with tailored copy when movement is a known
- * lift for this person. The behavioural-activation "do one small thing" and the always-present
- * crisis + "not right now" rows are appended.
+ * The order is fixed (#166, #352): "Not right now" first, then the Signals engine's Support menu
+ * without its crisis entry, then "Do one small thing", then the calm activities when they are
+ * switched on (#170), then "My safety plan" when one is written, and the crisis resource last
+ * (`docs/FEATURES.md` §7.2, §7.3). Nothing on the screen repeats an animation: the one fade as it
+ * opens is all the motion there is, and "Do one small thing" opening is the person's own tap.
  */
 @Composable
 fun SupportScreen(
@@ -57,6 +53,9 @@ fun SupportScreen(
     onMove: () -> Unit,
     onCrisis: () -> Unit,
     onSafetyPlan: () -> Unit,
+    onBlocks: () -> Unit,
+    onSand: () -> Unit,
+    onShelf: () -> Unit,
     viewModel: SupportViewModel = hiltViewModel(),
     signalsViewModel: SignalsViewModel = hiltViewModel(),
 ) {
@@ -88,27 +87,34 @@ fun SupportScreen(
                 modifier = Modifier.padding(bottom = 6.dp),
             )
 
+            // First, and as easy to hit as any other option (#352).
+            MenuOption("Not right now", "That's okay too.", onClose)
             // Contextual, rules-based picks from the engine (crisis is appended separately, last).
             val mainOptions = supportSignals.filter { it.kind != "support_crisis" }
             val crisis = supportSignals.firstOrNull { it.kind == "support_crisis" }
-            mainOptions.forEachIndexed { i, signal ->
-                FloatingOption(
-                    i, signal.title, signal.body,
+            mainOptions.forEach { signal ->
+                MenuOption(
+                    signal.title, signal.body,
                     supportClick(signal.action, onTalk, onBreathe, onReframe, onMove, onCrisis, onClose),
                 )
             }
             // A tiny behavioural-activation step from the fixed Do one thing list (#483).
-            SmallThingOption(mainOptions.size, onClose)
+            SmallThingOption(onClose)
+            // Something for the hands, never the default and gone entirely when switched off (#170).
+            if (viewModel.showCalmActivities) {
+                MenuOption("Falling blocks", "Turn and place slow shapes. Nothing is counted.", onBlocks)
+                MenuOption("Sand to rake", "Draw lines in the sand, then smooth it flat.", onSand)
+                MenuOption("Tidy a little shelf", "Put books on a shelf in any order. Shake to tumble them.", onShelf)
+            }
             // The safety plan sits quietly in the list, and only when one has been written — a row
             // that leads to a blank page is the opposite of what the plan is for.
-            var next = mainOptions.size + 1
             if (hasSafetyPlan) {
-                FloatingOption(next++, "My safety plan", "The one you wrote.", onSafetyPlan)
+                MenuOption("My safety plan", "The one you wrote.", onSafetyPlan)
             }
+            // The crisis floor: last in every support menu (`docs/FEATURES.md` §7.3).
             crisis?.let {
-                FloatingOption(next++, it.title, it.body, onCrisis)
+                MenuOption(it.title, it.body, onCrisis)
             }
-            FloatingOption(next, "Not right now", "That's okay too.", onClose)
         }
     }
 }
@@ -131,17 +137,10 @@ private fun supportClick(
     else -> onClose
 }
 
-/** A gently bobbing, tappable option. The bob period varies by [index] so they drift organically. */
+/** A tappable option. It stays still: a moving card is harder to tap with an unsteady hand (#352). */
 @Composable
-private fun FloatingOption(index: Int, title: String, subtitle: String, onClick: () -> Unit) {
-    val transition = rememberInfiniteTransition(label = "float$index")
-    val bob by transition.animateFloat(
-        initialValue = -1f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(tween(2400 + index * 350), RepeatMode.Reverse),
-        label = "bob$index",
-    )
-    PaperSurface(modifier = Modifier.fillMaxWidth().offset(y = (bob * 5).dp)) {
+private fun MenuOption(title: String, subtitle: String, onClick: () -> Unit) {
+    PaperSurface(modifier = Modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier.fillMaxWidth().clickable { onClick() }.padding(18.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp),
@@ -157,17 +156,10 @@ private fun FloatingOption(index: Int, title: String, subtitle: String, onClick:
  * one of the person's own activities: a random one could read "Maybe a little Work?" (#483).
  */
 @Composable
-private fun SmallThingOption(index: Int, onDone: () -> Unit) {
+private fun SmallThingOption(onDone: () -> Unit) {
     val context = LocalContext.current
     var expanded by remember { mutableStateOf(false) }
-    val transition = rememberInfiniteTransition(label = "float$index")
-    val bob by transition.animateFloat(
-        initialValue = -1f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(tween(2400 + index * 350), RepeatMode.Reverse),
-        label = "bob$index",
-    )
-    PaperSurface(modifier = Modifier.fillMaxWidth().offset(y = (bob * 5).dp)) {
+    PaperSurface(modifier = Modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier.fillMaxWidth().clickable { expanded = !expanded }.padding(18.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),

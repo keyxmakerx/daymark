@@ -51,13 +51,6 @@ class MailContentGuardLinkScopeTest {
             kind = MailMessage.ReviewKind.NEW_SHARE,
         )
         MailContentGuard.assertClean(review, MailTemplates.render(review))
-
-        val recovery = MailMessage.AccessRecovery(
-            to = "owner@example.org",
-            confirmUrl = URI("https://mood.example.org/recover#t=abc123"),
-            expiresAt = expiry,
-        )
-        MailContentGuard.assertClean(recovery, MailTemplates.render(recovery))
     }
 
     @Test
@@ -181,10 +174,10 @@ class MailContentGuardLinkScopeTest {
     @Test
     fun `link validation is unaffected by the scan change`() {
         // The scheme/host checks run before the scan and are not part of what moved.
-        val msg = MailMessage.AccessRecovery(
+        val msg = MailMessage.ReviewNotification(
             to = "owner@example.org",
-            confirmUrl = URI("http://mood.example.org/recover#t=abc123"),
-            expiresAt = expiry,
+            portalUrl = URI("http://mood.example.org/portal"),
+            kind = MailMessage.ReviewKind.NEW_SHARE,
         )
         val e = assertFailsWith<MailContentViolation> {
             MailContentGuard.assertClean(msg, MailTemplates.render(msg))

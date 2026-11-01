@@ -200,6 +200,15 @@ export const TELL_THEM_YOURSELF =
 export const KEEP_ACCESS = 'Keep access'
 
 /** The one clay element on this surface. */
+/**
+ * The clinician's own notes are locked to the key this removes (notes/vault.ts), so leaving makes
+ * them unopenable. Said before the click, with the way to keep them, because afterwards there is
+ * no way to say it usefully.
+ */
+export const LEAVE_LOCKS_YOUR_NOTES =
+  'Your own notes about this person are locked to the key that leaving removes, so they cannot be ' +
+  'opened afterwards. If you need to keep them, download a plain copy from Notes first.'
+
 export const LEAVE_CONFIRM = 'Leave'
 
 /**

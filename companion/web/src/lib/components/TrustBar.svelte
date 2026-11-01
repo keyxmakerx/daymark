@@ -100,9 +100,10 @@
         scopes the claim to the one key a share is sealed to rather than promising who can read it.
       -->
       <strong>This tab sends data to your server.</strong> Account actions send identifiers, and
-      recovery sends the email address you type. A share you seal leaves this browser too, as
-      ciphertext sealed to one clinician's pinned key: the server can see that it exists and how
-      big it is, not what is in it. Your passphrase stays in this browser.
+      the email address you register. Getting back in sends a proof made with your recovery code,
+      never the code. A share you seal leaves this browser too, as ciphertext sealed to one
+      clinician's pinned key: the server can see that it exists and how big it is, not what is in
+      it. Your passphrase stays in this browser.
     {/if}
   </p>
 </aside>

@@ -293,6 +293,13 @@ the insight D6 does not build, and the person reads the report too. It cites not
 nothing. Where evidence is citable, it is
 psychoeducation for the person, in the app.
 
+**The outside of a printed report carries no data.** A cover before side 1 and a back page after
+side 4 are each the person's choice and off by default. Neither holds a score or an entry: the
+cover says what the document is, the range and the date, and the back page is room for notes by
+hand. They are not sides, so the side count does not change. Printed on both sides, each gets a
+sheet of its own, padded with blank pages that say why they are blank, and side 1 opens on a
+right-hand page.
+
 **As built:** `export/PdfReportGenerator.kt`, `export/ReportLayout.kt`, `stats/DiscussionPrompts.kt`.
 Seeing the report before export: `ui/export/ReportExportScreen.kt` (#198).
 Source: [the August plan §1](https://github.com/keyxmakerx/daymark/blob/968638594f10f6a4424415f8a5c14fd8eb4aaa00/docs/PLAN_2026-08-NEXT.md?plain=1#L9-L58).
@@ -342,7 +349,8 @@ one rule: **a phone reaches every owner route the token reaches, except the rout
 make a practice, or change how the owner recovers**, the notification address and the key documents
 among them. Those answer it 403 from one list in the code, and a route the gate cannot name is refused
 to a phone, never opened to it. A phone that could add a phone would survive its own revocation; one
-that could set the recovery address could have the console's token re-issued to whoever holds it; one
+that could set the notification address could send the notice of a recovery somewhere the owner
+never reads (#325); one
 that could write the key document could leave the owner's passphrase opening nothing.
 
 Settled with it (2026-09-26, on #186 and #189):
@@ -413,6 +421,17 @@ maintainer chose varied brightness on 2026-10-25: a sky in which every star burn
 pattern of dots rather than a sky, and brightness drawn from identity ranks no day.
 
 ---
+
+## D12. A clinician's own notes are theirs, locked to their key, and outlive the sharing
+
+A clinician writes notes about their work with a client in the console's Notes page. The notes are
+the clinician's writing, not the client's data, so they stay with the clinician when the client
+stops sharing, as most places require clinicians to keep records. They are locked to a key derived
+from the clinician's own box key, so neither the client nor the server can read them. Today they are
+kept only in the clinician's browser (`companion/web/src/lib/notes/vault.ts`); a notebook that does
+not open is reported and never written over. Leaving the relationship removes that key, and the
+leave confirmation says so before the click. Not built: a server copy and search across clients,
+#548.
 
 ## Decisions recorded in closed issues
 

@@ -24,6 +24,7 @@ import java.util.Base64
  *                                         +- id 2 -> MANIFEST_SEED   (Ed25519 signing seed)
  *                                         +- id 3 -> owner X25519 seed  ([ownerIdentityFromMaster])
  *                                         +- id 4 -> owner Ed25519 seed ([ownerIdentityFromMaster])
+ *                                         +- id 5 -> owner recovery Ed25519 seed ([ownerRecoveryPublicKey])
  *   snapshot blob = MAGIC("DMS1") | FMT | nonce(24) | XChaCha20Poly1305(body, AAD, nonce, SYNC_KEY)
  *     FMT 0x02, the only format written:  body = pad(plaintext)   AAD = utf8("daymark.snapshot.v2|" + lineage + "|" + version)
  *     FMT 0x01, still read, never written: body = plaintext        AAD = utf8("daymark.snapshot.v1|" + lineage + "|" + version)
@@ -343,6 +344,26 @@ class SyncCrypto(private val sodium: LazySodium) {
         }
     }
 
+    /**
+     * master -> the public half of the owner's recovery key: subkey 5 seeds an Ed25519 pair whose
+     * signature gets the owner back into the Companion when their sign-in is lost (#325,
+     * companion/web/src/lib/owner/recoveryKey.ts). The phone signs nothing with it; it is derived
+     * here so subkey 5 is spoken for on this side too, and so the phone and the browser agree on
+     * the key the server records. OwnerPairingVectorTest pins the vector the web pins. The seed
+     * and the private half are wiped before this returns.
+     */
+    internal fun ownerRecoveryPublicKey(master: ByteArray): ByteArray {
+        if (master.size != KeyDerivation.MASTER_KEY_BYTES) throw SyncCryptoException("master key must be exactly 32 bytes")
+        val seed = deriveSubkey(master, SUBKEY_OWNER_RECOVERY, Sign.SEEDBYTES)
+        try {
+            val (publicKey, secretKey) = deriveSignKeypair(seed)
+            secretKey.fill(0)
+            return publicKey
+        } finally {
+            seed.fill(0)
+        }
+    }
+
     internal fun deriveSubkey(master: ByteArray, subkeyId: Long, subkeyLen: Int): ByteArray {
         val subkey = ByteArray(subkeyLen)
         val rc = sodium.cryptoKdfDeriveFromKey(subkey, subkey.size, subkeyId, KDF_CONTEXT, master)
@@ -485,6 +506,9 @@ class SyncCrypto(private val sodium: LazySodium) {
         /** Reserved for the owner's pairing identity on both platforms (owner/identity.ts). */
         internal const val SUBKEY_OWNER_BOX = 3L
         internal const val SUBKEY_OWNER_SIGN = 4L
+
+        /** Reserved for the owner's recovery key on both platforms (owner/recoveryKey.ts). */
+        internal const val SUBKEY_OWNER_RECOVERY = 5L
 
         private const val BELOW_FLOOR = "KDF parameters are below the security floor; refusing to derive"
         private const val ABOVE_CEILING = "KDF parameters are above the ceiling; refusing to derive"

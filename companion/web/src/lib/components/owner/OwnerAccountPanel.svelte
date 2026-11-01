@@ -35,12 +35,19 @@
 
   let {
     credential,
+    recoveryPublicKey,
     baseUrl = '',
     api = ownerAccountApi(baseUrl),
     onsignedin,
     onsignedout,
   }: {
     credential: OwnerCredential
+    /**
+     * The public half of the recovery key of the unlocked journal (owner/recoveryKey.ts). The
+     * account records it when it is made, so a lost sign-in can be won back by the recovery code
+     * (#325); without it no account is made.
+     */
+    recoveryPublicKey: Uint8Array | null
     baseUrl?: string
     api?: OwnerAccountApi
     onsignedin: (session: AccountSession) => void
@@ -60,7 +67,7 @@
   const host = typeof location === 'undefined' ? '' : location.host
   const secret = $derived(seed ? base32(seed) : '')
   const qr = $derived(secret ? qrDrawing(otpauthUri(secret, host, 'owner')) : null)
-  const createReady = $derived(validName(name) && validTotp(digits) && seed !== null)
+  const createReady = $derived(validName(name) && validTotp(digits) && seed !== null && recoveryPublicKey !== null)
 
   $effect(() => {
     // Only a token-connected console is offered the account; a session already is one.
@@ -76,11 +83,11 @@
 
   async function makeAccount(event: SubmitEvent) {
     event.preventDefault()
-    if (isSession(credential) || !seed || !createReady || busy) return
+    if (isSession(credential) || !seed || !recoveryPublicKey || !createReady || busy) return
     busy = true
     problem = ''
     try {
-      const out = await api.create(credential, { name, seed, totpCode: digits })
+      const out = await api.create(credential, { name, seed, totpCode: digits, recoveryPublicKey })
       if (!out.ok) {
         problem = out.message
         return

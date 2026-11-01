@@ -3,6 +3,7 @@ package com.daymark.app.ui.support
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.daymark.app.data.SafetyPlanRepository
+import com.daymark.app.data.SettingsRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -13,7 +14,11 @@ import javax.inject.Inject
 @HiltViewModel
 class SupportViewModel @Inject constructor(
     safetyPlanRepository: SafetyPlanRepository,
+    settings: SettingsRepository,
 ) : ViewModel() {
+
+    /** Whether the calm activities are listed; read on each visit, set under Gentle support (#170). */
+    val showCalmActivities: Boolean = settings.calmActivitiesEnabled
 
     /**
      * Whether the person has actually written a safety plan.

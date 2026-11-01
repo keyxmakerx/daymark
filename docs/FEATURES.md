@@ -167,8 +167,12 @@ entries are stars in the Sky (§4), and reach the PDF report only when the perso
   newest entry of every mood it holds; its own page lists every entry). Nothing is averaged or blended, and a day with no entry is the same square with
   no dots. A screen reader hears the date and each dot's mood in the person's own words ("3
   September: Good, Meh"), or "nothing recorded". Tapping a day opens its entries. **Year** is either a
-  night-card of stars or a grid of coloured squares (Year in Pixels, also under More), and leads to
-  **Review my year**.
+  night-card of stars or a grid (Year in Pixels, also under More), and leads to **Review my year**.
+  The grid is twelve small month calendars, Monday first, so each day sits under its weekday. A day
+  is never averaged: a day of one mood is a square in that mood's colour, and a day of more than one
+  is split, its highest mood above its lowest, so an Awful morning and a Rad night never read as a
+  Meh day. A day with no entry is a faint square and a day still to come is blank
+  (`stats/YearGrid.kt`).
 - **Average mood by activity** sets each of the eight most-logged activities beside the average
   mood of the entries that carry it, listed by name and never best-first. Nothing ranks activities
   or trackers by mood, and no `r` is shown: the person reads the table and draws their own
@@ -291,10 +295,11 @@ All under More. None of them is treatment.
 
 ### 7.2 "Take a moment"
 
-A calm screen for a hard moment. It opens with an acknowledgement, then offers a menu: move a
-little, breathe, untangle a thought, write it out, do one small thing, the person's safety plan
-(only once one has something in it, §8), crisis resources, and "Not right now". The menu is the same
-for everyone. "Do one small thing" offers three steps from the Do one thing list (a shower, a warm
+A calm screen for a hard moment. It opens with an acknowledgement, then offers a menu, in this
+order: "Not right now"; move a little, breathe, untangle a thought and write it out; do one small
+thing; the three calm activities (§7.2.1), unless they are switched off; the person's safety plan
+(only once one has something in it, §8); and crisis resources, last. The menu is the same for
+everyone. "Do one small thing" offers three steps from the Do one thing list (a shower, a warm
 drink, stepping outside), and "Move a little" offers a short stretch; neither ever names one of the
 person's own activities (#483).
 
@@ -328,14 +333,47 @@ The rules it keeps, condensed from the design research:
 
 Never offered: generic affirmations, cold-water immersion, or a comparison with the person's
 earlier, better days. Every default is the same for everyone. Daymark never asks what someone uses
-it for, or records a condition, to set one (#166). The screen and rules 1–3 disagree today: "Not
-right now" comes last, the options drift on endless animations with no reduced-motion check, and
-the opening line puts a feeling into words. Not built: #352 (the order and the motion), #353 (the
-opening lines).
+it for, or records a condition, to set one (#166). The options stay still: the one fade
+as the screen opens is all the motion there is (#352). The opening line still puts a feeling into
+words. Not built: #353 (the opening lines).
 
 Not built: more techniques (progressive muscle relaxation, cognitive defusion, brief mindfulness, a
-self-compassion break, naming the feeling, 5-4-3-2-1 grounding, a calm game): #170. A clinician
-recommending, never setting, how often the support space is offered: #172.
+self-compassion break, naming the feeling, 5-4-3-2-1 grounding): #170. A clinician recommending,
+never setting, how often the support space is offered: #172.
+
+#### 7.2.1 Calm activities
+
+Three things for the hands, each its own option in the menu (#170): **Falling blocks** (turn and
+place small shapes; a full row goes), **Sand to rake** (a finger leaves grooves; "Smooth" wipes
+them) and **Tidy a little shelf** (drag books onto two shelves in any order, or tap one to stand it
+at the end of a shelf; a firm shake of the phone, or the Shake button, tumbles them loose). Distraction has good short-term evidence for a hard moment and none as a long-term
+treatment, and some people find a game a strain rather than a rest, so both are offered, never the
+default, and easy to turn off. The rules they keep, beyond §7.2's:
+
+- **Nothing to win or lose.** Nothing is counted: no score, no tally of rows, no timer, no progress,
+  no "game over". When the falling-blocks stack reaches the top band, rows are taken from the
+  bottom, so it just stops rising (`app/src/main/java/com/daymark/app/calm/CalmBlocks.kt`). Clear
+  and Smooth start over. The shelf has no right order and nothing marks it done, even with every
+  book up (`app/src/main/java/com/daymark/app/calm/CalmShelf.kt`).
+- **Nothing moves on its own.** A shape stays at the top until the person moves it, and falls when
+  they say so; a groove stays until they smooth it. Neither screen animates, so there is nothing
+  for reduced motion to change. Books never fall by themselves.
+- **A shake has to be meant.** The shelf listens to the accelerometer only while it is on screen,
+  and tumbles only on three sharp peaks above 2.5 g within a second, then waits a second and a half
+  before it can tumble again. One jolt, from a pocket, a bag or a phone set down hard, does
+  nothing. The numbers are a judgement not yet tried on a phone, which is why the Shake button is
+  always there too.
+- **Always a way out.** "Back to the menu" is the first thing on each screen, and the back gesture
+  does the same.
+- **A natural end.** About ten minutes in, one fixed line appears: "You can keep going, or go back
+  to the menu." It never says how the person feels.
+- **Nothing recorded.** A visit is not logged anywhere and the sand is not saved.
+- **Off in one tap.** **More → Gentle support → Show calm activities** is on by default and, turned
+  off, removes all three from the menu. It works whether or not Gentle support itself is on, because the
+  menu can be reached either way.
+
+`TakeAMomentSourceTest` holds the menu's order, its stillness and the activities' words;
+`CalmBlocksTest`, `SandRakeTest`, `CalmShelfTest` and `ShakeDetectorTest` hold the rules above (`tools/jvm-tests.sh calm`).
 
 ### 7.3 Crisis resources and the crisis floor
 
@@ -651,7 +689,14 @@ decisions rather than a reading of the current moment: #162.
   be taken back." — the report's own fixed copy, not a second wording — then offers a date range (90
   days by default), check-in notes (off by default), charts (on), "Include mood beside each
   activity" (off by default; when on, side 2 lists each activity's average mood by name, never
-  best-first, #483), and "Choose journal entries to include", off by default. With check-in notes off, side 2 says "Check-in notes were
+  best-first, #483), "Choose journal entries to include", off by default, and two more off by
+  default: "Add a cover page" and "Add a back page for notes". The cover says what the document is,
+  the range and the date; the back page is ruled lines for writing on by hand; neither carries a
+  score or an entry, so a printed report shows none of the person's data on its outside. With either
+  on, "Printing on both sides" appears: the cover's reverse is left blank so side 1 opens on a
+  right-hand page, and the back page becomes the reverse of a sheet of its own, with as many blank
+  pages as that takes, each saying "This page is left blank for printing on both sides."
+  (`export/ReportLayout.kt`). With check-in notes off, side 2 says "Check-in notes were
   switched off for this export." and neither of its tables has a note column; the daily check-ins
   keep their activity tags under a head of their own. "Next" leads to one flow
   (`ui/export/ReportExportScreen.kt`). With journal entries switched on, it opens the picker first

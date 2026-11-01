@@ -131,6 +131,16 @@ class SettingsRepository @Inject constructor(
         get() = SupportOfferFrequency.fromKey(prefs.getString(KEY_SUPPORT_OFFER_FREQ, null))
         set(value) = prefs.edit().putString(KEY_SUPPORT_OFFER_FREQ, value.name).apply()
 
+    /**
+     * Whether "Take a moment" lists its calm activities (#170). On by default and off in one tap
+     * under Gentle support; off removes them from the menu entirely, for anyone who finds them a
+     * strain rather than a rest. Independent of [gentleSupportEnabled], because the menu can be
+     * reached without it.
+     */
+    var calmActivitiesEnabled: Boolean
+        get() = prefs.getBoolean(KEY_CALM_ACTIVITIES, true)
+        set(value) = prefs.edit().putBoolean(KEY_CALM_ACTIVITIES, value).apply()
+
     /** Epoch millis of the last interruption; 0 = never. Rationed by [supportOfferFrequency]. */
     var supportOfferLastShownAt: Long
         get() = prefs.getLong(KEY_SUPPORT_OFFER_LAST, 0L)
@@ -192,6 +202,7 @@ class SettingsRepository @Inject constructor(
         private const val KEY_GENTLE_SUPPORT = "gentle_support_enabled"
         private const val KEY_SUPPORT_OFFER_FREQ = "support_offer_frequency"
         private const val KEY_SUPPORT_OFFER_LAST = "support_offer_last_shown_at"
+        private const val KEY_CALM_ACTIVITIES = "calm_activities_enabled"
         private const val KEY_CHECKIN_QUESTIONS = "checkin_questions_allowed"
         private const val KEY_SLEEP_QUESTION = "checkin_sleep_question"
         private const val KEY_HARD_TIME_UNTIL = "hard_time_until"

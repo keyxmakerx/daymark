@@ -45,22 +45,28 @@ describe('making the account', () => {
   it('sends the token as a bearer, the seed as base64url, and the code without spaces', async () => {
     const seed = new Uint8Array(20).map((_, i) => i + 1)
     const { api, seen } = fake(200, { name: 'Sam', csrfToken: 'c', absoluteExpiry: 1 })
-    const out = await api.create('the-token', { name: ' Sam ', seed, totpCode: '123 456' })
+    const recoveryPublicKey = new Uint8Array(32).fill(7)
+    const out = await api.create('the-token', { name: ' Sam ', seed, totpCode: '123 456', recoveryPublicKey })
     expect(out).toEqual({ ok: true, value: { name: 'Sam', csrf: 'c' } })
     expect(seen[0].url).toBe('https://companion.example/v1/owner/account')
     expect(headersOf(seen[0]).Authorization).toBe('Bearer the-token')
-    expect(JSON.parse(String(seen[0].init.body))).toEqual({ name: 'Sam', totpSecret: base64url(seed), totpCode: '123456' })
+    expect(JSON.parse(String(seen[0].init.body))).toEqual({
+      name: 'Sam',
+      totpSecret: base64url(seed),
+      totpCode: '123456',
+      recoveryPublicKey: base64url(recoveryPublicKey),
+    })
   })
 
   it('a 200 without an anti-CSRF token is not a success', async () => {
     const { api } = fake(200, { name: 'Sam', csrfToken: '' })
-    const out = await api.create('t', { name: 'Sam', seed: new Uint8Array(20), totpCode: '123456' })
+    const out = await api.create('t', { name: 'Sam', seed: new Uint8Array(20), totpCode: '123456', recoveryPublicKey: new Uint8Array(32) })
     expect(out).toEqual({ ok: false, status: 200, message: UNEXPECTED })
   })
 
   it.each([400, 401, 409, 422, 429])('a %i is its fixed sentence', async (status) => {
     const { api } = fake(status, { error: 'server words' })
-    const out = await api.create('t', { name: 'Sam', seed: new Uint8Array(20), totpCode: '123456' })
+    const out = await api.create('t', { name: 'Sam', seed: new Uint8Array(20), totpCode: '123456', recoveryPublicKey: new Uint8Array(32) })
     expect(out).toEqual({ ok: false, status, message: CREATE_REFUSAL[status] })
   })
 })
@@ -127,6 +133,14 @@ describe('the panel, read as source', () => {
     expect(panel).toMatch(/seed\.fill\(0\)\s*\n\s*seed = null/)
     // Positive control: the pattern does not match source that only drops the reference.
     expect('seed = null').not.toMatch(/seed\.fill\(0\)\s*\n\s*seed = null/)
+  })
+
+  it('records the recovery key with the account, and makes none without it (#325)', () => {
+    expect(panel).toContain('api.create(credential, { name, seed, totpCode: digits, recoveryPublicKey })')
+    expect(panel).toMatch(/const createReady = \$derived\([^\n]*recoveryPublicKey !== null\)/)
+    expect(consoleSrc).toContain('recoveryPublicKey={session?.recoveryPublicKey ?? null}')
+    // Control: the pattern does not match a readiness check that leaves the key out.
+    expect('const createReady = $derived(validName(name) && seed !== null)').not.toMatch(/const createReady = \$derived\([^\n]*recoveryPublicKey !== null\)/)
   })
 
   it('labels the authenticator entry as the owner, not as the administrator', () => {

@@ -51,10 +51,7 @@
   let data = $state<BackupData | null>(null)
   let fileName = $state('')
   let error = $state('')
-  // An emailed access-token recovery link lands here as `#t=<token>` (see RecoverAccess.svelte);
-  // land the owner straight on the recovery tab instead of the default "open a backup" tab.
-  const startedOnRecoveryLink = typeof window !== 'undefined' && /(?:^|[#&])t=/.test(window.location.hash)
-  let source = $state<Surface>(startedOnRecoveryLink ? 'recover' : 'file')
+  let source = $state<Surface>('file')
 
   /*
    * ═══════════════════════════════════════════════════════════════════════════════════════════
@@ -176,7 +173,7 @@
 
   $effect(() => {
     const shape = decidedShape(decision)
-    if (shape === null || shape === landedShape || startedOnRecoveryLink) return
+    if (shape === null || shape === landedShape) return
     landedShape = shape
     source = shapeById(shape).primary
   })
@@ -204,18 +201,9 @@
   }
 
   /*
-   * The gate. Open only when there is no answer yet AND this visit is not a recovery link.
-   *
-   * The recovery bypass is not a convenience. An emailed access-token link is followed by someone
-   * who has already lost something, and a first-run question standing between them and their own
-   * access would be the one failure this screen must never cause. The question is deferred rather
-   * than answered, and ShapeStrip says which of those it is instead of leaving the machine
-   * looking set up.
+   * The gate. Open only while there is no answer yet.
    */
-  const setupGateOpen = $derived(
-    !startedOnRecoveryLink && (decision.state === 'reading' || decision.state === 'ask'),
-  )
-  const shapeUndecided = $derived(decidedShape(decision) === null)
+  const setupGateOpen = $derived(decision.state === 'reading' || decision.state === 'ask')
 
   /*
    * THE MASTHEAD FOLLOWS THE SHAPE.
@@ -348,7 +336,6 @@
           onopenpractice={() => (source = 'practice')}
           {storageRefused}
           {forgetRefused}
-          bypassed={startedOnRecoveryLink && shapeUndecided}
         />
 
         <!--

@@ -17,6 +17,8 @@
  * name, a seed, a code, a token or a CLI credential.
  */
 import { base64url } from '../admin/claim'
+import type { RecoveryChallenge } from './recoveryKey'
+import type { RecoverableDataKey } from '../recovery/dataKey'
 
 type FetchLike = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
 
@@ -92,6 +94,23 @@ export const CLI_REFUSAL: Record<number, string> = {
   404: 'That credential is already revoked, or does not exist here.',
 }
 
+/** Asking for a challenge (#325). Each names what is missing, never a cause the page cannot know. */
+export const RECOVERY_REFUSAL: Record<number, string> = {
+  404: 'This server has no sign-in of its own yet. Until it has, it signs in with the access token set where it is installed.',
+  409: 'This server holds no recovery code for you, so it cannot be used to get back in here.',
+  429: 'Too many attempts from here. Wait a minute and try again.',
+  503: 'This server has no public address set, so it cannot check a recovery. Whoever runs it sets DAYMARK_PUBLIC_BASE_URL.',
+}
+
+/** Replacing the sign-in (#325). */
+export const RECOVER_REFUSAL: Record<number, string> = {
+  400: 'The server could not take that name or key. Names are 1 to 64 letters, digits, spaces, dots, dashes or underscores.',
+  401: 'That recovery was not accepted. It may have taken longer than ten minutes. Nothing was changed, so start again from your recovery code.',
+  422: 'The six digits did not match the authenticator. Nothing was changed, so try the next six.',
+  429: 'Too many attempts from here. Wait a minute and try again.',
+  503: 'This server has no public address set, so it cannot check a recovery. Whoever runs it sets DAYMARK_PUBLIC_BASE_URL.',
+}
+
 export const UNREACHABLE = 'The server did not answer. Check that it is running and reachable from here.'
 export const UNEXPECTED = 'The server answered in a way this console does not expect. Nothing was changed.'
 
@@ -141,8 +160,15 @@ function readSignedIn(body: unknown, nameKey = 'name', csrfKey = 'csrfToken'): S
 
 export interface OwnerAccountApi {
   status(): Promise<Outcome<AccountStatus>>
-  /** Make the account with the shared [token], once. On success the token is retired. */
-  create(token: string, req: { name: string; seed: Uint8Array; totpCode: string }): Promise<Outcome<SignedIn>>
+  /**
+   * Make the account with the shared [token], once, recording [req.recoveryPublicKey], the key that
+   * can later replace the sign-in (#325). On success the token is retired.
+   */
+  create(token: string, req: { name: string; seed: Uint8Array; totpCode: string; recoveryPublicKey: Uint8Array }): Promise<Outcome<SignedIn>>
+  /** A fresh challenge to sign, with the wrapped key's recovery-code slots (#325). */
+  recoveryChallenge(): Promise<Outcome<RecoveryChallenge>>
+  /** Replace the lost sign-in: the challenge's signature, and a new name and authenticator. */
+  recover(req: { challengeId: string; signature: string; name: string; seed: Uint8Array; totpCode: string }): Promise<Outcome<SignedIn>>
   signIn(name: string, code: string): Promise<Outcome<SignedIn>>
   /** The live session's name and anti-CSRF token, for a reloaded console; 401 when there is none. */
   session(): Promise<Outcome<SignedIn>>
@@ -181,15 +207,60 @@ export function ownerAccountApi(baseUrl = '', doFetch: FetchLike = fetch.bind(gl
       return refusal(r.status, {})
     },
 
-    async create(token, { name, seed, totpCode }) {
+    async create(token, { name, seed, totpCode, recoveryPublicKey }) {
       const r = await send('/v1/owner/account', {
         method: 'POST',
         headers: { ...JSON_HEADERS, Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ name: name.trim(), totpSecret: base64url(seed), totpCode: totpCode.replace(/\s/g, '') }),
+        body: JSON.stringify({
+          name: name.trim(),
+          totpSecret: base64url(seed),
+          totpCode: totpCode.replace(/\s/g, ''),
+          recoveryPublicKey: base64url(recoveryPublicKey),
+        }),
       })
       if (r === null) return refusal(null, CREATE_REFUSAL)
       const made = r.status === 200 ? readSignedIn(r.body) : null
       return made ? { ok: true, value: made } : refusal(r.status, CREATE_REFUSAL)
+    },
+
+    async recoveryChallenge() {
+      const r = await send('/v1/owner/recovery/challenge', { method: 'POST', headers: { accept: 'application/json' } })
+      if (r === null) return refusal(null, RECOVERY_REFUSAL)
+      const b = r.body
+      if (
+        r.status === 200 &&
+        isObj(b) &&
+        typeof b.challengeId === 'string' &&
+        typeof b.challenge === 'string' &&
+        typeof b.ownerId === 'string' &&
+        typeof b.expiresAt === 'number' &&
+        isObj(b.recoveryKey) &&
+        Array.isArray(b.recoveryKey.slots)
+      ) {
+        return {
+          ok: true,
+          value: {
+            challengeId: b.challengeId,
+            challenge: b.challenge,
+            ownerId: b.ownerId,
+            expiresAt: b.expiresAt,
+            // Checked slot by slot, and refused whole on any fault, by dataKey.ts as it opens it.
+            recoveryKey: b.recoveryKey as unknown as RecoverableDataKey,
+          },
+        }
+      }
+      return refusal(r.status, RECOVERY_REFUSAL)
+    },
+
+    async recover({ challengeId, signature, name, seed, totpCode }) {
+      const r = await send('/v1/owner/recovery', {
+        method: 'POST',
+        headers: JSON_HEADERS,
+        body: JSON.stringify({ challengeId, signature, name: name.trim(), totpSecret: base64url(seed), totpCode: totpCode.replace(/\s/g, '') }),
+      })
+      if (r === null) return refusal(null, RECOVER_REFUSAL)
+      const signedIn = r.status === 200 ? readSignedIn(r.body) : null
+      return signedIn ? { ok: true, value: signedIn } : refusal(r.status, RECOVER_REFUSAL)
     },
 
     async signIn(name, code) {

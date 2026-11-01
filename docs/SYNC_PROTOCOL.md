@@ -187,12 +187,12 @@ grant, before taking it in.
 
 ## 2. HTTP API (`/v1`)
 
-Every route requires the owner: the owner's bearer token (`Authorization: Bearer <token>`), or the
-signature of a phone the owner paired (§2.1). At first boot the token is `DAYMARK_AUTH_TOKEN`; after an
-access-recovery reissue (`POST /v1/recovery/confirm`) it is the rotated token, and the old one stops
-working at once. If the operator later changes `DAYMARK_AUTH_TOKEN`, the new environment value is
-accepted from the next start. Either re-issue disconnects every paired phone (§2.2). The server stores
-only a digest of the accepted token.
+Every route requires the owner: the owner's bearer token (`Authorization: Bearer <token>`), the
+owner's signed-in session once they have an account (COMPANION_SECURITY.md §5.9), or the signature of
+a phone the owner paired (§2.1). The token is `DAYMARK_AUTH_TOKEN`, and nothing re-issues it at
+runtime. If the operator changes it, the new value is accepted from the next start, and, while the
+owner has no account, that disconnects every paired phone (§2.2). Once the owner has an account the
+token signs nobody in. The server stores only a digest of the accepted token.
 
 A server serves one owner: the token and every paired phone belong to that owner. Whoever holds the
 token reaches every lineage, the one `keyparams` and the one wrapped key on the server; a paired phone

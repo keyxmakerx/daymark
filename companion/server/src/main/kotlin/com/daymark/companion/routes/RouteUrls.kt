@@ -12,9 +12,9 @@ import io.ktor.server.plugins.origin
  *
  * The request's scheme and `Host` are read only when [publicBaseUrl] is null here, and only a
  * `Config` built by hand gets here with none — the tests build theirs that way. A deployment never
- * does: a visitor controls `Host`, and an invitation link carries its secret. The UNAUTHENTICATED
- * access-token recovery flow (`RecoveryRoutes.kt`) does not use this helper at all; with no
- * configured address it sends nothing. See COMPANION_SECURITY.md §5.5.
+ * does: a visitor controls `Host`, and an invitation link carries its secret. Recovery by key
+ * (`OwnerRecoveryRoutes.kt`) does not use this helper at all: with no configured address it answers
+ * 503 rather than bind a proof to a `Host` the caller wrote. See COMPANION_SECURITY.md §5.5.
  */
 internal fun resolveBaseUrl(call: ApplicationCall, publicBaseUrl: String?): String {
     return publicBaseUrl?.trimEnd('/') ?: run {

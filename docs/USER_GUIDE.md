@@ -351,9 +351,16 @@ It's included in your backups, and never leaves your phone otherwise.
 ## Take a moment
 
 **Take a moment** is a calm space for a hard moment. It starts by acknowledging how you're doing,
-then offers a few gentle options: move a little, breathe, untangle a thought, write it out, do one
-small thing, your safety plan (once you've written one), and crisis resources. **Not right now** is
-always there, and choosing it is fine.
+then offers a few gentle options. **Not right now** is always first, and choosing it is fine. Then:
+move a little, breathe, untangle a thought, write it out, do one small thing, three calm activities,
+your safety plan (once you've written one), and crisis resources.
+
+The three calm activities are something for your hands. **Falling blocks**: turn and place small
+shapes, and a full row goes. **Sand to rake**: draw a finger across the sand, and **Smooth** wipes it
+flat. **Tidy a little shelf**: put the books on the shelves in any order (drag one, or tap it), and
+give the phone a firm shake, or tap **Shake**, to tumble them loose. Nothing is counted and there is
+nothing to win or lose; the shapes and books only move when you move them. **Back to the menu** is always at the top. If they aren't for you, turn off **More → Gentle
+support → Show calm activities** and they're gone from the menu.
 
 You can reach it:
 

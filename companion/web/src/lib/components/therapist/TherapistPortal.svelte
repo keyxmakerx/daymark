@@ -24,6 +24,7 @@
   import CalendarScreen from './CalendarScreen.svelte'
   import ClientRecordScreen from './ClientRecordScreen.svelte'
   import TimersScreen from '../timers/TimersScreen.svelte'
+  import NotesScreen from '../notes/NotesScreen.svelte'
   import { PRESETS } from '../../timers/timers'
   import {
     DISCIPLINES, PROFILES, defaultDisciplineStorage, loadDiscipline, presetsFor, saveDiscipline,
@@ -33,7 +34,7 @@
   import LowerAssuranceBanner from './LowerAssuranceBanner.svelte'
   import { AppShell, Callout, NavRail, PageHeader, type NavGroup, type NavItem } from '../ui'
 
-  type Tab = 'allowed' | 'today' | 'calendar' | 'record' | 'assign' | 'gameplan' | 'shared' | 'timers'
+  type Tab = 'allowed' | 'today' | 'calendar' | 'record' | 'assign' | 'gameplan' | 'shared' | 'timers' | 'notes'
 
   let ctx = $state<UnlockedContext | null>(null)
   let grant = $state<Grant | null>(null)
@@ -67,6 +68,7 @@
     assign: 'Assign',
     gameplan: 'Game plan',
     timers: 'Timers',
+    notes: 'Your notes',
   }
   const READ_LABEL: Record<'today' | 'calendar' | 'record' | 'shared', string> = {
     today: 'Today',
@@ -84,8 +86,9 @@
     if (canAssign) send.push({ id: 'assign', label: 'Assign' })
     if (grant && hasCapability(grant, 'authorGamePlan')) send.push({ id: 'gameplan', label: 'Game plan' })
     if (send.length) groups.push({ label: 'Send', items: send })
-    // Not behind any capability: a timer reads nothing of the client's and stays in this browser.
-    groups.push({ label: 'Tools', items: [{ id: 'timers', label: 'Timers' }] })
+    // Not behind any capability: neither reads anything of the client's, and both stay in this
+    // browser. Notes are the clinician's own writing, locked to their key (notes/vault.ts).
+    groups.push({ label: 'Tools', items: [{ id: 'notes', label: 'Notes' }, { id: 'timers', label: 'Timers' }] })
     groups.push({ label: 'This browser', items: [{ id: 'allowed', label: 'Allowed' }] })
     return groups
   })
@@ -332,7 +335,15 @@
       -->
       <TimersScreen open={tab === 'timers'} heading={false} presets={presetsFor(discipline, PRESETS)} />
 
-      {#if grant && tab !== 'timers'}
+      {#if tab === 'notes'}
+        <NotesScreen
+          boxPrivateKey={ctx.keys.box.privateKey}
+          therapistFp={ctx.therapistFp}
+          kind={profile.noteKind}
+          sections={profile.noteSections}
+          {now}
+        />
+      {:else if grant && tab !== 'timers'}
         {#if tab === 'allowed'}
           <AllowedPanel {grant} ownerSigningFp={ctx.pinnedOwnerSigningFp} therapistFp={ctx.therapistFp} />
           <!--

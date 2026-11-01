@@ -44,6 +44,11 @@ export interface OwnerSession {
    * console reads and adds to the owner's lane with (lane/lane.ts, #345). Wiped when it locks.
    */
   lane: LaneKey
+  /**
+   * The public half of the owner's recovery key (owner/recoveryKey.ts, #325), derived at unlock:
+   * what the account records when it is made. Not secret.
+   */
+  recoveryPublicKey: Uint8Array
 }
 
 /** Update a therapist's grant within the session (returns a new session for reactive updates). */

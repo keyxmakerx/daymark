@@ -38,6 +38,7 @@
     LEAVE_ACTION,
     LEAVE_CONFIRM,
     LEAVE_DOES_NOT_REACH_COPIES,
+    LEAVE_LOCKS_YOUR_NOTES,
     LEAVE_DONE,
     LEAVE_IS_NOT_UNDONE,
     LEAVE_RECORD_REMAINS,
@@ -112,6 +113,7 @@
       <p class="body">{LEAVE_IS_NOT_UNDONE}</p>
       <p class="body">{LEAVE_TOUCHES_NOTHING_OF_THEIRS}</p>
       <p class="body">{LEAVE_DOES_NOT_REACH_COPIES}</p>
+      <p class="body">{LEAVE_LOCKS_YOUR_NOTES}</p>
       <p class="body">{TELL_THEM_YOURSELF}</p>
       <div class="actions">
         <button type="button" class="plain" onclick={() => (confirming = false)} disabled={working}>

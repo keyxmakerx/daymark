@@ -68,7 +68,7 @@ fun YearPixelsScreen(
             }
             YearInPixelsGrid(
                 year = state.year,
-                dayMoods = state.dayMoods,
+                dayLevels = state.dayLevels,
                 modifier = Modifier.padding(top = 8.dp),
             )
         }

@@ -82,11 +82,12 @@ describe('(a) where the control is', () => {
 describe('(b) what the confirm says, and in what order', () => {
   const confirm = LEAVE_MARKUP.slice(LEAVE_MARKUP.indexOf('class="confirm"'), LEAVE_MARKUP.indexOf('</div>', LEAVE_MARKUP.indexOf('class="actions"')))
 
-  it('states the four sentences as the shared constants, never reworded', () => {
+  it('states the five sentences as the shared constants, never reworded', () => {
     for (const name of [
       'LEAVE_IS_NOT_UNDONE',
       'LEAVE_TOUCHES_NOTHING_OF_THEIRS',
       'LEAVE_DOES_NOT_REACH_COPIES',
+      'LEAVE_LOCKS_YOUR_NOTES',
       'TELL_THEM_YOURSELF',
     ]) {
       expect(confirm, name).toContain(`{${name}}`)
@@ -101,7 +102,8 @@ describe('(b) what the confirm says, and in what order', () => {
     const at = (n: string) => confirm.indexOf(`{${n}}`)
     expect(at('LEAVE_IS_NOT_UNDONE')).toBeLessThan(at('LEAVE_TOUCHES_NOTHING_OF_THEIRS'))
     expect(at('LEAVE_TOUCHES_NOTHING_OF_THEIRS')).toBeLessThan(at('LEAVE_DOES_NOT_REACH_COPIES'))
-    expect(at('LEAVE_DOES_NOT_REACH_COPIES')).toBeLessThan(at('TELL_THEM_YOURSELF'))
+    expect(at('LEAVE_DOES_NOT_REACH_COPIES')).toBeLessThan(at('LEAVE_LOCKS_YOUR_NOTES'))
+    expect(at('LEAVE_LOCKS_YOUR_NOTES')).toBeLessThan(at('TELL_THEM_YOURSELF'))
   })
 
   it('offers Keep access and Leave, and names the keep in terms of what it does', () => {

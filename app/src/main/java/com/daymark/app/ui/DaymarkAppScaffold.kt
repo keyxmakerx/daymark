@@ -502,10 +502,23 @@ fun DaymarkAppScaffold(
                     onReframe = { navController.navigate(Routes.thoughtRecord()) },
                     onMove = { navController.navigate(Routes.MOVEMENT) },
                     onCrisis = { navController.navigate(Routes.CRISIS) },
+                    onBlocks = { navController.navigate(Routes.SUPPORT_BLOCKS) },
+                    onSand = { navController.navigate(Routes.SUPPORT_SAND) },
+                    onShelf = { navController.navigate(Routes.SUPPORT_SHELF) },
                 )
             }
             composable(Routes.SUPPORT_BREATHE, enterTransition = sheetEnter, popExitTransition = sheetPopExit) {
                 BreathingPacerScreen(onDone = { navController.popBackStack() })
+            }
+            // The calm activities return to the menu they were chosen from, never past it (#170).
+            composable(Routes.SUPPORT_BLOCKS, enterTransition = sheetEnter, popExitTransition = sheetPopExit) {
+                com.daymark.app.ui.support.CalmBlocksScreen(onBackToMenu = { navController.popBackStack() })
+            }
+            composable(Routes.SUPPORT_SAND, enterTransition = sheetEnter, popExitTransition = sheetPopExit) {
+                com.daymark.app.ui.support.SandRakeScreen(onBackToMenu = { navController.popBackStack() })
+            }
+            composable(Routes.SUPPORT_SHELF, enterTransition = sheetEnter, popExitTransition = sheetPopExit) {
+                com.daymark.app.ui.support.CalmShelfScreen(onBackToMenu = { navController.popBackStack() })
             }
             composable(Routes.CRISIS, enterTransition = zEnter, popExitTransition = zPopExit) {
                 CrisisResourcesScreen(onBack = { navController.popBackStack() })
@@ -592,6 +605,9 @@ fun DaymarkAppScaffold(
                     navArgument("notes") { type = NavType.BoolType; defaultValue = false },
                     navArgument("charts") { type = NavType.BoolType; defaultValue = true },
                     navArgument("activities") { type = NavType.BoolType; defaultValue = false },
+                    navArgument("cover") { type = NavType.BoolType; defaultValue = false },
+                    navArgument("back") { type = NavType.BoolType; defaultValue = false },
+                    navArgument("twoSided") { type = NavType.BoolType; defaultValue = false },
                     navArgument("pick") { type = NavType.BoolType; defaultValue = false },
                 ),
                 enterTransition = zEnter,
@@ -608,6 +624,9 @@ fun DaymarkAppScaffold(
                         includeNotes = args?.getBoolean("notes") ?: false,
                         includeCharts = args?.getBoolean("charts") ?: true,
                         includeActivityTable = args?.getBoolean("activities") ?: false,
+                        includeCover = args?.getBoolean("cover") ?: false,
+                        includeBackPage = args?.getBoolean("back") ?: false,
+                        twoSided = args?.getBoolean("twoSided") ?: false,
                     )
                 }
                 ReportExportScreen(

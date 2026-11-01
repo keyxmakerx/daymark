@@ -65,6 +65,9 @@ instruction, and label below is **authored by us**, not copied from any book, wo
 - **Yoga / stretch & bodyweight routines (Move)** — built from public-domain sequences and generic
   bodyweight intervals, with all instructions in **our own words** and **original hand-drawn pose
   figures** (no branded programs, no third-party images).
+- **Calm activities (Falling blocks, Sand to rake, Tidy a little shelf)** — distraction as a short-term distress
+  tolerance skill, a general technique. Both activities, their shapes and their wording are our own;
+  the falling-blocks shapes are deliberately not any game's set, and nothing claims an effect.
 - **Safety planning ("My safety plan")** — the general method of writing down warning signs, things
   that help, people to reach, and reasons to stay. Tagged **Adapted (◐)** in-app. See the caveat
   below; this one has a live licence question the others don't.

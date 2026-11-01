@@ -168,6 +168,8 @@
   let setUpIdentity: Identity | null = null
   /** The sync key of the same set-up's master, with its read-back's ETag, held beside it (#345). */
   let setUpLane: LaneKey | null = null
+  /** The set-up's recovery public key, held beside its identity until the code is written down (#325). */
+  let setUpRecoveryKey: Uint8Array | null = null
   /**
    * A create the server took (201) whose read-back could not be read: what was sent, kept until a
    * later read finds the server holding exactly it. While it is set, no identity exists, and the
@@ -196,6 +198,8 @@
    * the same unlock or set-up, never on its own, and handed to the console with it.
    */
   let laneKey: LaneKey | null = null
+  /** The public half of the recovery key of the same master (owner/recoveryKey.ts, #325). */
+  let recoveryPublicKey: Uint8Array | null = null
 
   const messageId = $props.id()
   /** Derived from the one id this component may ask for — `$props.id()` is once per component. */
@@ -284,11 +288,12 @@
    * would be a recovery slot nobody holds. The identity waits until the code is confirmed written
    * down.
    */
-  function keyStored(stored: { recoveryCode: RecoveryCode; identity: Identity; lane: LaneKey }) {
+  function keyStored(stored: { recoveryCode: RecoveryCode; identity: Identity; lane: LaneKey; recoveryPublicKey: Uint8Array }) {
     error = ''
     notice = ''
     setUpIdentity = stored.identity
     setUpLane = stored.lane
+    setUpRecoveryKey = stored.recoveryPublicKey
     newCode = stored.recoveryCode
     codeStep = 'showing'
   }
@@ -328,6 +333,7 @@
         if (back.ok) {
           setUpIdentity = back.identity
           setUpLane = { syncKey: back.syncKey, keyDocumentEtag: out.etag }
+          setUpRecoveryKey = back.recoveryPublicKey
           unreadSent = null
           return
         }
@@ -370,8 +376,10 @@
     await initAssignmentCrypto()
     opened(setUpIdentity)
     laneKey = setUpLane
+    recoveryPublicKey = setUpRecoveryKey
     setUpIdentity = null
     setUpLane = null
+    setUpRecoveryKey = null
   }
 
   /** The one place the session's identity is set: from an unlock, or from a set-up's read-back. */
@@ -430,6 +438,7 @@
       }
       opened(out.identity)
       laneKey = { syncKey: out.syncKey, keyDocumentEtag }
+      recoveryPublicKey = out.recoveryPublicKey
       // Neither secret is needed again, and neither should outlive the click that used it.
       passphrase = ''
       groups = emptyGroups()
@@ -528,8 +537,11 @@
   }
 
   function enter() {
-    if (!ownerIdentity || !readWith || !laneKey) return
-    onunlock({ ownerBox: ownerIdentity.x25519, ownerSign: ownerIdentity.ed25519, pinned: [...pinned], lane: laneKey }, readWith)
+    if (!ownerIdentity || !readWith || !laneKey || !recoveryPublicKey) return
+    onunlock(
+      { ownerBox: ownerIdentity.x25519, ownerSign: ownerIdentity.ed25519, pinned: [...pinned], lane: laneKey, recoveryPublicKey },
+      readWith,
+    )
   }
 </script>
 

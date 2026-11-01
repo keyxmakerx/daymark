@@ -17,7 +17,6 @@ object MailTemplates {
     // Fixed subject strings. Kept as constants so the guard can whitelist them exactly.
     const val INVITE_SUBJECT = "Your Daymark Companion invitation"
     const val REVIEW_SUBJECT = "You have something to review in Daymark Companion"
-    const val RECOVERY_SUBJECT = "Confirm your Daymark Companion access-token recovery"
     const val SECURITY_SUBJECT = "Security notice from your Daymark Companion"
 
     private val ISO = DateTimeFormatter.ISO_INSTANT
@@ -25,7 +24,6 @@ object MailTemplates {
     fun render(msg: MailMessage): RenderedMail = when (msg) {
         is MailMessage.TherapistInvite -> renderInvite(msg)
         is MailMessage.ReviewNotification -> renderNotification(msg)
-        is MailMessage.AccessRecovery -> renderRecovery(msg)
         is MailMessage.SecurityNotice -> renderSecurityNotice(msg)
     }
 
@@ -60,29 +58,13 @@ object MailTemplates {
         return RenderedMail(REVIEW_SUBJECT, body)
     }
 
-    private fun renderRecovery(msg: MailMessage.AccessRecovery): RenderedMail {
-        val expiry = ISO.format(msg.expiresAt)
-        val body = buildString {
-            append("A request was made to recover access to your Daymark Companion server.\n\n")
-            append("If this was you, open this single-use link to continue:\n")
-            append(msg.confirmUrl.toString())
-            append("\n\n")
-            append("This link expires at ")
-            append(expiry)
-            append(".\n\n")
-            append("If you did not request this, you can ignore this email — nothing changes unless the link above is opened.\n")
-            append("This email contains no personal or health information.\n")
-        }
-        return RenderedMail(RECOVERY_SUBJECT, body)
-    }
-
     private fun renderSecurityNotice(msg: MailMessage.SecurityNotice): RenderedMail {
         val body = buildString {
             when (msg.event) {
-                MailMessage.SecurityEvent.TOKEN_REISSUED ->
-                    append("Your Daymark Companion server access token was just re-issued. The previous token no longer works.\n\n")
+                MailMessage.SecurityEvent.SIGN_IN_RECOVERED ->
+                    append("Someone got back into your Daymark Companion with your recovery code and made a new sign-in. Every earlier sign-in has been signed out.\n\n")
             }
-            append("If you did not do this, your registered email address may be compromised — check your Companion deployment.\n")
+            append("If you did not do this, someone else may have your recovery code. Sign in to your Companion and check your paired phones and clinicians.\n")
             append("This email contains no personal or health information.\n")
         }
         return RenderedMail(SECURITY_SUBJECT, body)

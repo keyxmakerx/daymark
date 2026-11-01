@@ -78,24 +78,10 @@ class OwnerAccountStoreTest {
     }
 
     @Test
-    fun `a runtime rotation survives a restart when the env token is unchanged`() {
+    fun `an operator changing the env token makes the new value the accepted one`() {
         val dir = tmpDir()
         val first = OwnerAccountStore(dir, envToken = "env-token-1")
-        val rotated = first.rotateToken()
-        assertNotEquals("env-token-1", rotated)
-        first.close()
-
-        // Simulate a restart with the SAME env value: the rotated token must still be live.
-        val second = OwnerAccountStore(dir, envToken = "env-token-1")
-        assertEquals(Secrets.tokenHash(rotated), second.currentTokenHash())
-        second.close()
-    }
-
-    @Test
-    fun `an operator changing the env token overrides a prior runtime rotation`() {
-        val dir = tmpDir()
-        val first = OwnerAccountStore(dir, envToken = "env-token-1")
-        first.rotateToken()
+        assertEquals(Secrets.tokenHash("env-token-1"), first.currentTokenHash())
         first.close()
 
         // Simulate a redeploy with a NEW secret file/env value: the operator's explicit change wins.
@@ -160,28 +146,11 @@ class OwnerAccountStoreTest {
     }
 
     @Test
-    fun `requestReissue only mints for the registered email, constant-time compared`() {
-        val dir = tmpDir()
-        val store = OwnerAccountStore(dir, envToken = "t")
-        // No email registered yet: never mints.
-        assertNull(store.requestReissue("owner@example.org", 3600))
-
-        store.setNotificationSettings("owner@example.org", emptySet())
-        assertNull(store.requestReissue("someone-else@example.org", 3600))
-        val minted = store.requestReissue("owner@example.org", 3600)
-        assertNotNull(minted)
-        assertEquals("owner@example.org", minted.email)
-        store.close()
-    }
-
-    @Test
-    fun `email registration and matching are case-insensitive`() {
+    fun `email registration is stored in one spelling, lowercase`() {
         val dir = tmpDir()
         val store = OwnerAccountStore(dir, envToken = "t")
         store.setNotificationSettings("Owner@Example.ORG", emptySet())
         assertEquals("owner@example.org", store.registeredEmail())
-        assertNotNull(store.requestReissue("owner@example.org", 3600))
-        assertNotNull(store.requestReissue("OWNER@EXAMPLE.ORG", 3600))
         store.close()
     }
 
@@ -192,110 +161,6 @@ class OwnerAccountStoreTest {
         assertNull(store.registeredEmail())
         store.setNotificationSettings("owner@example.org", setOf(MailMessage.ReviewKind.NEW_ASSIGNMENT))
         assertEquals("owner@example.org", store.registeredEmail())
-        store.close()
-    }
-
-    @Test
-    fun `confirmReissue rotates the token exactly once and is single-use`() {
-        val dir = tmpDir()
-        val store = OwnerAccountStore(dir, envToken = "original-token")
-        store.setNotificationSettings("owner@example.org", emptySet())
-        val minted = store.requestReissue("owner@example.org", 3600)!!
-
-        val result = store.confirmReissue(minted.confirmToken)
-        assertTrue(result is ReissueConfirmOutcome.Rotated)
-        val newToken = (result as ReissueConfirmOutcome.Rotated).newToken
-        assertNotEquals("original-token", newToken)
-        assertEquals(Secrets.tokenHash(newToken), store.currentTokenHash())
-
-        // Second confirm of the same token is Gone (single-use).
-        assertEquals(ReissueConfirmOutcome.Gone, store.confirmReissue(minted.confirmToken))
-        store.close()
-    }
-
-    @Test
-    fun `confirmReissue is Gone after expiry`() {
-        var now = 0L
-        val dir = tmpDir()
-        val store = OwnerAccountStore(dir, envToken = "t", clock = { now })
-        store.setNotificationSettings("owner@example.org", emptySet())
-        val minted = store.requestReissue("owner@example.org", ttlSeconds = 10)!!
-        now += 20_000
-        assertEquals(ReissueConfirmOutcome.Gone, store.confirmReissue(minted.confirmToken))
-        store.close()
-    }
-
-    @Test
-    fun `confirmReissue rejects an unknown token`() {
-        val dir = tmpDir()
-        val store = OwnerAccountStore(dir, envToken = "t")
-        assertEquals(ReissueConfirmOutcome.Gone, store.confirmReissue("not-a-real-token"))
-        store.close()
-    }
-
-    @Test
-    fun `confirmReissue invokes onRotated synchronously, before returning, with the new token`() {
-        val dir = tmpDir()
-        val store = OwnerAccountStore(dir, envToken = "original-token")
-        store.setNotificationSettings("owner@example.org", emptySet())
-        val minted = store.requestReissue("owner@example.org", 3600)!!
-
-        val callbackToken = mutableListOf<String>()
-        val result = store.confirmReissue(minted.confirmToken) { newToken -> callbackToken += newToken }
-        // The callback already ran by the time confirmReissue returns (called from inside its
-        // own lock) — callers rely on this to apply the rotation atomically with the persist.
-        assertEquals(1, callbackToken.size)
-        assertEquals((result as ReissueConfirmOutcome.Rotated).newToken, callbackToken[0])
-        store.close()
-    }
-
-    @Test
-    fun `concurrent confirms of the same token — exactly one wins and the callback fires exactly once`() {
-        val dir = tmpDir()
-        val store = OwnerAccountStore(dir, envToken = "original-token")
-        store.setNotificationSettings("owner@example.org", emptySet())
-        val minted = store.requestReissue("owner@example.org", 3600)!!
-
-        val rotatedTokens = CopyOnWriteArrayList<String>()
-        val outcomes = CopyOnWriteArrayList<ReissueConfirmOutcome>()
-        val threadCount = 8
-        val pool = Executors.newFixedThreadPool(threadCount)
-        val ready = CountDownLatch(threadCount)
-        val go = CountDownLatch(1)
-        repeat(threadCount) {
-            pool.submit {
-                ready.countDown()
-                go.await()
-                outcomes += store.confirmReissue(minted.confirmToken) { newToken -> rotatedTokens += newToken }
-            }
-        }
-        ready.await()
-        go.countDown()
-        pool.shutdown()
-        pool.awaitTermination(10, TimeUnit.SECONDS)
-
-        val wins = outcomes.filterIsInstance<ReissueConfirmOutcome.Rotated>()
-        assertEquals(1, wins.size, "exactly one concurrent confirm of a single-use token must win")
-        assertEquals(threadCount - 1, outcomes.count { it == ReissueConfirmOutcome.Gone })
-        assertEquals(1, rotatedTokens.size, "the onRotated callback must fire exactly once")
-        assertEquals(wins[0].newToken, rotatedTokens[0])
-        assertEquals(Secrets.tokenHash(wins[0].newToken), store.currentTokenHash())
-        store.close()
-    }
-
-    @Test
-    fun `allowReissueAttempt caps requests per source and refills over time`() {
-        var now = 0L
-        val dir = tmpDir()
-        val store = OwnerAccountStore(dir, envToken = "t", clock = { now })
-        assertTrue(store.allowReissueAttempt("peer", maxPerHour = 2))
-        assertTrue(store.allowReissueAttempt("peer", maxPerHour = 2))
-        assertFalse(store.allowReissueAttempt("peer", maxPerHour = 2))
-        // A different source is independent.
-        assertTrue(store.allowReissueAttempt("other-peer", maxPerHour = 2))
-        // After the full window elapses, the bucket refills.
-        now += 3_600_000
-        assertTrue(store.allowReissueAttempt("peer", maxPerHour = 2))
         store.close()
     }
 }

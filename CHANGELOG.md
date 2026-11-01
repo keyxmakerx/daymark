@@ -7,6 +7,23 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Added
+- **Clinicians can keep their own notes.** The clinician console has a Notes page. Each note follows
+  your discipline's parts, has a day and tags, and can be found by searching any words in it or by
+  choosing tags. Notes are locked to your key and kept only in this browser, so the client and the
+  server cannot read them, and they stay with you if the client stops sharing. You can download a
+  plain copy for your records. Leaving a relationship now warns that your notes cannot be opened
+  afterwards.
+- **Three calm activities in Take a moment.** **Falling blocks** (turn and place small shapes; a
+  full row goes), **Sand to rake** (draw in the sand, then smooth it) and **Tidy a little shelf**
+  (put books on a shelf in any order; a firm shake, or the Shake button, tumbles them loose). Nothing is counted, there is
+  nothing to win or lose, and nothing moves unless you move it. **Back to the menu** is always at
+  the top, and **More → Gentle support → Show calm activities** takes them out of the menu. A jolt in a pocket doesn't count as a shake.
+- **"Not right now" is first in Take a moment, and the options stay still.** The crisis resource is
+  last, and the cards no longer drift.
+- **The year grid reads like a calendar, and keeps a day's ups and downs.** Insights → Year → Grid
+  and Year in Pixels now show twelve small month calendars, so every day sits under its weekday. A
+  day with more than one mood is split, its highest above its lowest, instead of being averaged
+  into a mood it never was. Days still to come are left blank.
 - **An invitation can be shown as a code.** After you create an invite link for a clinician, **Show
   as a code** draws it as a QR code, so a clinician in the room can open it with their phone's
   camera instead of being sent the link. The screen says that anyone who can see it can open it,
@@ -27,8 +44,13 @@ All notable changes to this project are documented here. The format is based on
   authenticator app. Everything already on the server stays yours and your paired phones keep
   working; after that the token opens nothing, and the owner page asks for your name and six digits.
   The command-line writer gets a credential of its own from the console, set as `DAYMARK_CLI_TOKEN`,
-  which can only read and write backups and can be revoked there. Email recovery is switched off
-  once your sign-in is made (#324).
+  which can only read and write backups and can be revoked there (#324).
+- **Companion: lost your sign-in? Your recovery code gets you back in.** On the owner page's
+  **Recover access** card, type your recovery code, a new name and a new authenticator. The code
+  never leaves the page: only a proof made with it is sent. Every earlier sign-in is signed out,
+  your phones and clinicians stay as they are, and if you registered an email, a notice goes to it.
+  Making your sign-in now records the key this needs, so a sign-in made before this cannot be got
+  back this way. The server needs `DAYMARK_PUBLIC_BASE_URL` set for it (#325).
 - **A background for your phone, made from your sky.** **Background** on your sky makes a picture
   for your lock or home screen: **Space only**, your sky's colours and gas with none of your stars,
   or **With my stars**. Drag it or tap **Another view** to frame it, then your phone's own picker
@@ -75,6 +97,12 @@ All notable changes to this project are documented here. The format is based on
 - **Start evening check-ins in your sky**, off unless you turn it on: the evening reminder opens on
   the night sky and your new star lands there. The notification looks exactly as before (#540).
 - **A tracker in your sky opens its check-in settings** from its card (#539).
+- **The PDF report can have a cover and a back page.** Both are off until you switch them on in the
+  export dialog. The cover says what the report is, its dates and when it was made; the back page is
+  lined, for notes by hand. Neither shows any of your scores or entries, so a printed report shows
+  nothing of yours on the outside. Switch on **Printing on both sides** and blank pages are added so
+  the cover and the back page each sit on a sheet of their own and the report opens on a right-hand
+  page.
 - **You can call your crisis line from the app.** Once you've said the line is right for you, the
   crisis screen has a **Call** button, and **Text** where the line takes texts. Each opens your
   phone's own dialer or messages app with the number filled in; Daymark never places a call. The
@@ -83,6 +111,8 @@ All notable changes to this project are documented here. The format is based on
   feel like too much**, which always leads to the crisis screen (#482).
 
 ### Changed
+- **Your own console's tabs are grouped.** The eight tabs above your console sit in three named
+  groups: Sharing, Your records, and Keys and alerts. The tab you are on is underlined.
 - **The clinician console is calmer.** Once you sign in, it uses the same side rail as the practice
   and admin consoles. Places are grouped as Their share, Send, Tools and This browser, with one
   thing on the screen at a time. Your discipline and Log out sit at the foot of the rail. On a phone
@@ -130,6 +160,9 @@ All notable changes to this project are documented here. The format is based on
   "Signed in as" (#496).
 - **A practice role's duties that have no screen yet say "Not built"** where the role is chosen,
   so a front desk is no longer offered a calendar that does not exist.
+- **The Key tells time one way, by colour.** Its line for your sky's shape no longer says the
+  oldest memories are at the top. It says the shape is chance, and a river sky's line no longer
+  promises a river you cannot see: its stars wind down the sky like one.
 - **A restore that fails part-way keeps your photos and reminders.** "Replace all" used to empty
   the photo folder and switch reminders off before it knew the restore would work. The file's
   photos now wait in a staging folder until the restore has succeeded, and reminders and tracker
@@ -156,6 +189,9 @@ All notable changes to this project are documented here. The format is based on
   rather than a lone dot (#398).
 
 ### Removed
+- **Companion: the emailed reset of the owner's access token.** No email can hand out a credential
+  any more; a lost sign-in comes back with the recovery code instead. `DAYMARK_REISSUE_MAX_PER_HOUR`
+  and `DAYMARK_REISSUE_CONFIRM_TTL_SECONDS` are no longer read (#325).
 - **Nothing ranks your activities by mood, and nothing names one on a hard day.** The cards
   "'X' goes with your better days … make it a gentle goal?" and "'X' tends to go with lower days"
   are gone, with their switch under Settings → Suggestions, and so are the Insights lists of what was

@@ -46,9 +46,9 @@ import javax.crypto.spec.SecretKeySpec
  * Ordered by what actually matters on a self-hosted zero-knowledge relay:
  *
  * 1. `event="recovery.confirmed"` — **page a human.** This is the one event that changes who can
- *    reach the data: the owner bearer token has just been rotated by someone who followed an
- *    emailed link. Expected roughly never. One of these that the owner did not initiate is a full
- *    compromise of server access.
+ *    reach the data: the owner's sign-in has just been replaced by someone who proved the
+ *    owner's recovery key. Expected roughly never. One of these that the owner did not initiate
+ *    means their recovery code is in someone else's hands.
  * 2. `severity="critical"` — currently `recovery.confirmed` and `config.refused`. A
  *    `config.refused` with `detail.startup=true` means the process is *not coming up*; that is an
  *    outage, and on a personal journal an outage is silent until someone tries to write.
