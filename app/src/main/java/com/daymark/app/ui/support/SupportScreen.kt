@@ -55,6 +55,7 @@ fun SupportScreen(
     onSafetyPlan: () -> Unit,
     onBlocks: () -> Unit,
     onSand: () -> Unit,
+    onShelf: () -> Unit,
     viewModel: SupportViewModel = hiltViewModel(),
     signalsViewModel: SignalsViewModel = hiltViewModel(),
 ) {
@@ -103,6 +104,7 @@ fun SupportScreen(
             if (viewModel.showCalmActivities) {
                 MenuOption("Falling blocks", "Turn and place slow shapes. Nothing is counted.", onBlocks)
                 MenuOption("Sand to rake", "Draw lines in the sand, then smooth it flat.", onSand)
+                MenuOption("Tidy a little shelf", "Put books on a shelf in any order. Shake to tumble them.", onShelf)
             }
             // The safety plan sits quietly in the list, and only when one has been written — a row
             // that leads to a blank page is the opposite of what the plan is for.
