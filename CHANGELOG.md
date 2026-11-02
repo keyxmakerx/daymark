@@ -7,6 +7,15 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Added
+- **Staff sign in once, with an account of their own.** Every clinician, psychiatrist, assistant,
+  supervisor, receptionist and practice administrator has one sign-in, however many people they work
+  with. A practice administrator gives out a staff invitation link for a seat with a role, and
+  whoever takes it makes their own sign-in and is seated. An administrator can close a lost
+  account; nobody can reset someone else's sign-in, so the clinician adds each of their
+  relationships to the new account themselves, by proving the key their client paired with.
+  Leaving one relationship no longer signs a clinician out of the others. Sign-ins made before this,
+  one per relationship, keep working; a clinician moves their relationships onto one of them with
+  the same key proof. The screens for these come next (#552).
 - **Clinicians can keep their own notes.** The clinician console has a Notes page. Each note follows
   your discipline's parts, has a day and tags, and can be found by searching any words in it or by
   choosing tags. Notes are locked to your key and kept only in this browser, so the client and the

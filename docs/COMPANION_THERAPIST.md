@@ -227,9 +227,10 @@ Everything in §9 is the owner's direction. The clinician has one of their own.
 
 At the foot of the console's **Allowed** page. Confirming it does exactly three things, in order:
 
-1. **The server records an ending** — one insert-only row keyed on the relationship — and closes the
-   clinician's sign-in for it: a correct code is answered `410 Gone` from then on, and every live
-   session the credential holds is cut.
+1. **The server records an ending** — one insert-only row keyed on the relationship — and the
+   clinician's account reaches that relationship no more, from the next request on, in every session
+   on every machine. The account stays open for their other relationships
+   ([COMPANION_SECURITY.md](COMPANION_SECURITY.md) §5.10).
 2. **The browser forgets its key record** for the relationship, and re-reads to check the write took.
    A browser that refuses is told so rather than reassured.
 3. **The session is signed out.**
@@ -244,8 +245,8 @@ At the foot of the console's **Allowed** page. Confirming it does exactly three 
 - **It un-reads nothing.** What the clinician decrypted is on their machine.
 - **It touches nothing of the owner's.** No share is withdrawn, no grant changed, no blob removed. If
   what was shared should stop being delivered, the owner's Revoke does that, and it is theirs to press.
-- **It deletes no credential.** The closure is a row in a separate insert-only table; `totp` is never
-  changed.
+- **It deletes no credential and closes no account.** The ending is a row in a separate insert-only
+  table; the account and its attachments are never changed.
 - **It does not reach copies.** The acceptance screen offers the key record as text to keep, on
   purpose, and the confirmation says so.
 

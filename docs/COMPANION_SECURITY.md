@@ -38,7 +38,7 @@ drafts made that were false (R1–R12); code cites them by number.
 | Owner, in the browser console (the phone later: #138) | The passphrase, the master key and the owner's X25519 and Ed25519 private keys (derived, §4), and plaintext — in memory while unlocked | The clinician's private keys |
 | Clinician, in the browser portal | Their X25519 and Ed25519 private keys, wrapped under a reading passphrase in their own browser; share plaintext in memory only | The owner's passphrase or keys; any other patient's data |
 | Server | Ciphertext, sealed content keys, signatures, public keys, token digests, sign-in code seeds (§5.2), routing metadata, audit chains | Any private key, unwrapped content key, passphrase or plaintext |
-| Practice administrator | Membership and roles. Every administrator, of a practice or of the server, signs in with an account of their own that holds no key (#208). The server administrator's is built (#322); a practice's is not: #314 | Any key or content ([COMPANION_ACCESS_CONTROL.md](COMPANION_ACCESS_CONTROL.md)) |
+| Practice administrator | Membership and roles. Every administrator, of a practice or of the server, signs in with an account of their own that holds no key (#208). The server administrator's is built (#322); a practice's is a staff account with the administrator role (§5.10) | Any key or content ([COMPANION_ACCESS_CONTROL.md](COMPANION_ACCESS_CONTROL.md)) |
 | Operator | The container, its volume, its logs | Nothing beyond what the server holds |
 
 **Assets, most sensitive first:** the owner's passphrase and private keys; the owner's plaintext; the
@@ -268,9 +268,9 @@ nothing that decrypts a record or authors content.
 
 Each person who uses a server signs in with an account of their own — the owner, an administrator,
 each clinician and each member of the front desk — and the shared `DAYMARK_AUTH_TOKEN` is nobody's
-sign-in (#208). Not built: #314 for staff. As built, a clinician signs in with a code per
-relationship (§5.2), and the owner signs in with an account of their own (§5.9), made once with the
-bearer token, which then signs nobody in.
+sign-in (#208). Each member of staff has one account and signs in once with a code (§5.2, §5.10),
+and the owner signs in with an account of their own (§5.9), made once with the bearer token, which
+then signs nobody in.
 
 ### 5.1 Passkeys (WebAuthn)
 
@@ -285,19 +285,19 @@ implementation cannot fall back to a client-supplied `Host` header.
 
 The only sign-in a clinician has. RFC 6238: HMAC-SHA1, six digits, 30-second steps, one step of
 drift, compared in constant time. Each code is accepted at most once (the used step is recorded, so a
-shoulder-surfed code cannot be replayed). Five wrong codes lock the credential for 300 s, and a
+shoulder-surfed code cannot be replayed). Five wrong codes lock the account for 300 s, and a
 per-address budget sits in front.
 
 - The seed is generated in the clinician's browser (at least 16 bytes), is distinct from the
   invitation secret, and is sent once, at enrolment.
-- **The server stores the seed in the clear** (`auth.db`, table `totp`, column `secret_b64`), because a
+- **The server stores the seed in the clear** (`auth.db`, table `accounts`, column `secret_b64`), because a
   verifier must recompute codes and a hash cannot. Anyone who reads `/data` or a backup of it can mint
   valid codes for every enrolled clinician without anyone noticing. It opens no content: the code
   never unlocks a reading key.
-- **There is no way to replace a seed.** `totp` is insert-only, with one credential per relationship
-  (`idx_totp_rel_ref`). If a seed may have leaked, withdraw what is shared and start a new relationship
-  with a fresh invitation. The clinician can close the old credential themselves (§9a); the owner
-  cannot yet (#210).
+- **There is no way to replace a seed.** Nobody re-issues another person's sign-in. If a seed may
+  have leaked, a practice administrator closes the account and seats a new one, which reaches no
+  relationship until the clinician attaches each one again (§5.10). The owner cannot yet end a
+  clinician's access themselves (#210).
 
 ### 5.3 Step-up for sensitive actions
 
@@ -359,10 +359,9 @@ relies on:
   permanent and stated limit (R3, #222).
 - A clinician can end their own relationship (§9a). The owner cannot yet end a clinician's sign-in
   (#210). Rotating the owner's data key for whoever remains authorised is not built (#297).
-- One sign-in credential per relationship, as built. An owner may hold several relationships, one
-  per clinician, each with its own inbox token. Practices add a control plane and never a key. An
-  office needs one sign-in per clinician, however many relationships they hold (#288). Not built:
-  #314.
+- One sign-in per member of staff, however many relationships they hold (§5.10). An owner may hold
+  several relationships, one per clinician, each with its own inbox token. Practices add a control
+  plane and never a key.
 
 ### 5.8 Paired phones
 
@@ -414,6 +413,42 @@ owner's pairing identity. The properties the rest of this document relies on:
 - **The owner's own log**, `owner-audit.db`, has one row when a phone is paired, one when it is
   revoked, and one when a lockout arms, at most one a minute across the server, so addresses without
   number cannot fill it.
+
+### 5.10 Staff accounts
+
+Every member of staff, the administrator, each clinician, psychiatrist, assistant and supervisor, and
+each receptionist, has one account and signs in once (#314). An account is a sign-in name and its
+authenticator seed (§5.2). It adds no way to read: reading still needs the relationship's own keys,
+wrapped in the clinician's browser, and its inbox token.
+
+- **Relationships attach to the account.** `auth.db`'s `account_attachments` is insert-only; a
+  relationship's current account is its newest row. Every session-cookie route asks, on every
+  request, whether the account reaches the relationship it names: attached now, the account open,
+  the relationship not ended. An unattached relationship and one that never existed are refused
+  alike.
+- **An invitation attaches only a relationship no account has ever held**, so a leftover link cannot
+  attach it to a second account. The patient's invitation that creates a relationship creates the
+  invitee's account when they have none; a clinician already signed in attaches it to their own
+  (`POST /v1/account/attach/invitation`).
+- **A key proof is the only other way.** The clinician opens their key record with their reading
+  passphrase and signs `daymark-staff-attach-v1`, the account, the relationship, the server's
+  configured address and a fresh challenge with the clinician key the owner pinned
+  (`/v1/account/attach/challenge`, then `/v1/account/attach`). A challenge is good once, for ten
+  minutes, for that account and relationship, and every refusal reads the same. One
+  `relationship.attached` row goes to that relationship's log. This is how the credentials made one
+  per relationship before accounts, each migrated to an account of its own, are gathered onto one.
+- **Leaving closes one relationship on the account**, never the account (§9a); the account's other
+  relationships carry on in the same session.
+- **Staff invitations.** An administrator, with step-up, gives out a one-use link for a seat with a
+  role (`POST /v1/orgs/{orgId}/staff-invites`); the operator's token gives out administrator seats
+  only. Taking it (`POST /v1/orgs/join`) makes the person's account, or uses the one they are signed
+  in with, and seats it accepted. The secret is stored only as its digest, which is the row's key.
+- **Closing a lost account.** An administrator, with step-up, closes the account of a member who
+  accepted their seat (`POST /v1/orgs/{orgId}/members/{memberId}/close`): one insert-only row, every
+  session ended, one `org.account_closed` row. It signs in nowhere afterwards, on any practice, and
+  the relationships it held are reached by nobody until their clinician re-attaches each one.
+- **Sign-in lines** go to the log of every relationship the account reaches when it signs in. A
+  lockout is still one row per episode in each.
 
 ### 5.9 The owner's own account
 
@@ -619,7 +654,7 @@ stack trace; the server's own log line for an unhandled error does not yet meet 
   never written: #164); a token change at start, invitations minted or expired, reads of the log itself,
   bulk reads, and changes to logging policy (#187).
 
-## 9a. Closing a credential without deleting one
+## 9a. Ending a relationship without deleting anything
 
 A clinician can end their own access (issue #91). The security-relevant half is one row:
 
@@ -632,34 +667,26 @@ CREATE TABLE IF NOT EXISTS relationship_endings (
 ```
 
 It is written by `POST /v1/relations/{relRef}/ending`, which needs the clinician's session cookie and
-`X-CSRF-Token`, with the session bound to that exact relationship (a session for another one is
-refused 403). `POST /v1/totp/verify` consults it after the code verifies and answers `410 Gone`
-instead of issuing a session; the owner's next share publish to that relationship is refused 410
-before the body is read.
+`X-CSRF-Token`, from the account that holds that relationship (any other is refused 403). Every
+session-cookie route reads it on every request, so the ended relationship is refused from the next
+request on, on every machine, while the account and its other relationships carry on (§5.10); the
+owner's next share publish to that relationship is refused 410 before the body is read.
 
-**Why a separate table, not a flag or a delete.** `totp` is insert-only, and both halves of that
-matter. A DELETE would be worse than nothing: the unique index `idx_totp_rel_ref` is what stops a
-second enrolment, so removing the row would let anyone still holding the invitation link enrol a fresh
-credential against a relationship somebody has just left — an exit turned into an entrance. An UPDATE
-(`disabled=1`) would be a write path into the one table whose safety is that it has none. So the
-closure sits beside the credential, and `totp` is never touched. `rel_ref` is the primary key, which
-makes the write insert-only and idempotent in the same stroke, as in `therapist_keys` and
-`owner_keys`.
+**Why a separate table, not a flag or a delete.** Attachments are insert-only, and a relationship
+that has ever been attached refuses an invitation-made attachment. A delete would undo that, and let
+anyone still holding the invitation link attach a relationship somebody has just left: an exit turned
+into an entrance. So the ending sits beside the attachment and nothing is rewritten. `rel_ref` is the
+primary key, which makes the write insert-only and idempotent in the same stroke, as in
+`therapist_keys` and `owner_keys`.
 
-**Keyed on the relationship.** One credential per relationship means closing it ends exactly one
-relationship and reaches no other patient's work, and an ended relationship stays ended: the way back
-is a fresh invitation, which is a fresh relationship.
+**Keyed on the relationship.** Ending one relationship reaches no other patient's work, and an ended
+relationship stays ended: a key proof cannot re-attach it, and the way back is a fresh invitation,
+which is a fresh relationship.
 
-**What it discloses.** The 410 is reachable only behind a correct code; every earlier refusal on that
-route is an identical 401, so someone holding only a credential id — a username, not a secret — learns
-nothing. `GET /v1/relations/{relRef}/ending` answers the owner's bearer token with a timestamp, or 404
-while the relationship is live, and never echoes the credential id. The audit entry is appended once,
-when the ending is recorded, never per attempt — the same rule as a lockout, because a log that grows
-a row per retry buries the row that matters.
-
-**Ordering.** The row is written before the sessions are cut. A crash in between leaves "ended, with a
-session alive until it times out" — bounded, and already closed to new sign-ins. The other order would
-leave "signed out, not ended", which looks like a completed exit and is not one.
+**What it discloses.** `GET /v1/relations/{relRef}/ending` answers the owner's bearer token with a
+timestamp, or 404 while the relationship is live, and never echoes the account. The audit entry is
+appended once, when the ending is recorded, never per attempt — the same rule as a lockout, because a
+log that grows a row per retry buries the row that matters.
 
 ## 10. Supply chain and build
 

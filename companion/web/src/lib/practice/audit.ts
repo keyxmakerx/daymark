@@ -39,6 +39,9 @@ export const ORG_ACTION_LABEL: Record<string, string> = {
   'org.member_accepted': 'Member accepted their own seat',
   'org.member_role_changed': 'Member’s role changed',
   'org.member_removed': 'Member removed from the practice',
+  'org.staff_invited': 'Staff invitation given out',
+  'org.member_joined': 'Member joined with a staff invitation',
+  'org.account_closed': 'Member’s lost account closed',
   'org.action_denied': 'An action was refused',
 }
 

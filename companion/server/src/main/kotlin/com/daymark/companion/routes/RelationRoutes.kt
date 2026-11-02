@@ -497,7 +497,9 @@ private fun resolveTherapist(
             null
         }
         val v = authStore.validateSession(sessionId, sessionIdleSeconds, requireCsrf = csrf)
-        if (v.check == AuthStore.SessionCheck.OK && v.record?.relRef == relRef) return Role.THERAPIST
+        // The account must reach this relationship now (#314): attached to it, open, and the
+        // relationship not ended. Unattached and unknown relationships are refused alike.
+        if (v.check == AuthStore.SessionCheck.OK && v.record?.let { authStore.reaches(it.accountId, relRef) } == true) return Role.THERAPIST
         if (v.check == AuthStore.SessionCheck.EXPIRED) {
             auditSafely {
                 auditStore.append(relRef, AuditActor.THERAPIST, AuditAction.SESSION_EXPIRED, meta = sourceIpMeta(auditSourceIp, call))

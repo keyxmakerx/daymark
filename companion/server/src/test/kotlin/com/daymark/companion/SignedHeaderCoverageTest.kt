@@ -170,6 +170,7 @@ class SignedHeaderCoverageTest {
             "com/daymark/companion/routes/TherapistKeyRoutes.kt",
             "com/daymark/companion/routes/RelationshipEndingRoutes.kt",
             "com/daymark/companion/routes/OrgRoutes.kt",
+            "com/daymark/companion/routes/StaffAccountRoutes.kt",
         )
     }
 }

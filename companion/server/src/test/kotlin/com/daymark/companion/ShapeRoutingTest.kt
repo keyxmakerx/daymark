@@ -531,7 +531,7 @@ class ShapeRoutingTest {
             "v1/owner" to Group.OWNER,
             "v1/admin" to Group.ADMIN,
             "v1/rel" to Group.CLINICIAN, "v1/invite" to Group.CLINICIAN, "v1/totp" to Group.CLINICIAN,
-            "v1/session" to Group.CLINICIAN, "v1/webauthn" to Group.CLINICIAN, "v1/relations" to Group.CLINICIAN,
+            "v1/session" to Group.CLINICIAN, "v1/webauthn" to Group.CLINICIAN, "v1/relations" to Group.CLINICIAN, "v1/account" to Group.CLINICIAN,
             "v1/orgs" to Group.PRACTICE,
             "therapist" to Group.CLINICIAN_PAGE, "portal/invite" to Group.CLINICIAN_PAGE,
             "v1/{...}" to Group.PROBE,

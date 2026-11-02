@@ -81,8 +81,8 @@ is a side effect.
 - **Who runs it** (#288). A person runs their own server, or an office runs its own; Daymark runs
   none (§8). The old one-clinician scope is retired. An office grows in steps: one clinician, then a
   receptionist, then several clinicians, receptionists and doctors who assess and refer, and every
-  referral is a person's decision. Not built: a sign-in for each member of staff, #314; the front
-  desk's calendar, #299; referrals, #291. No real patient's data belongs on a Practice deployment
+  referral is a person's decision. Each member of staff signs in with an account of their own
+  (COMPANION_SECURITY.md §5.10). Not built: the front desk's calendar, #299; referrals, #291. No real patient's data belongs on a Practice deployment
   before an outside assessment: #284. The first-run Practice choice and the practice console say so
   in one fixed sentence (#333).
 
@@ -91,7 +91,7 @@ is a side effect.
 | Party | Holds | Trusted for |
 | --- | --- | --- |
 | **Owner** (the person whose journal it is) | The passphrase and the keys derived from it; the bearer token | Everything. The owner is the only root of trust |
-| **Clinician** (invited by the owner) | Their own keys, wrapped under a reading passphrase in their browser; a TOTP credential | Reading what the owner shares with them, for as long as the owner allows |
+| **Clinician** (invited by the owner) | Their own keys, wrapped under a reading passphrase in their browser; a staff account with a TOTP authenticator | Reading what the owner shares with them, for as long as the owner allows |
 | **Server** (the Companion container) | Ciphertext, public keys, metadata, the audit log | Availability only. Never for confidentiality, never to vouch for a key |
 | **Operator** (runs the container; often the owner) | The host, the environment, the logs | Keeping it running. Holding the host is not holding anyone's key |
 | **Practice administrator** | Membership and roles, on the control plane | Administration. No role, the administrator's included, reaches anyone's credentials, keys or content (#288) |
@@ -101,7 +101,7 @@ is a side effect.
   rotate it. Once the owner makes an account, the token signs nobody in.
 - **Everyone signs in as themselves** (#208). The owner, an administrator, each clinician and each
   receptionist has an account of their own, and the shared token stops being anyone's sign-in. The
-  owner's is built (COMPANION_SECURITY.md §5.9); staff accounts are not built: #314. A new server is claimed with a one-time setup code it prints to its own log,
+  owner's is built (COMPANION_SECURITY.md §5.9), and so are staff accounts (§5.10). A new server is claimed with a one-time setup code it prints to its own log,
   and the server console sits behind an administrator's own sign-in, a name and a six-digit code
   (#322). A lost owner sign-in comes back by proving the owner's recovery key, derived from the
   master the recovery code opens, never by email (#325, COMPANION_SECURITY.md §5.9).

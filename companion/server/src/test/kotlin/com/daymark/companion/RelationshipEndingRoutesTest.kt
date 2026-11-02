@@ -164,23 +164,26 @@ class RelationshipEndingRoutesTest {
     }
 
     @Test
-    fun `every session that credential holds is cut, not only the one that asked`() = testApplication {
+    fun `every session the account holds stops reaching it, not only the one that asked`() = testApplication {
         val f = fixture()
         application { module(f.cfg, null, null, f.rel, f.auth, f.audit) }
+        f.auth.registerOwnerKeys(relRefA, Secrets.b64url(ByteArray(32) { 1 }), Secrets.b64url(ByteArray(32) { 2 }))
         val onTheClinicMachine = f.auth.createSession("cred-a", relRefA, f.cfg.sessionIdleSeconds, f.cfg.sessionAbsoluteSeconds)
         val asking = f.auth.createSession("cred-a", relRefA, f.cfg.sessionIdleSeconds, f.cfg.sessionAbsoluteSeconds)
+        suspend fun ownerKeysWith(s: AuthStore.NewSession) =
+            client.get("/v1/relations/$relRefA/owner-keys") { header(HttpHeaders.Cookie, "daymark_session=${s.sessionId}") }.status
 
-        // The control: before leaving, the other session is genuinely live, so the assertion below
-        // is measuring the cut rather than a session that never worked.
-        assertEquals(
-            AuthStore.SessionCheck.OK,
-            f.auth.validateSession(onTheClinicMachine.sessionId, f.cfg.sessionIdleSeconds).check,
-        )
+        // The control: before leaving, the other session genuinely reaches the relationship, so the
+        // assertion below is measuring the ending rather than a session that never worked.
+        assertEquals(HttpStatusCode.OK, ownerKeysWith(onTheClinicMachine))
 
         assertEquals(HttpStatusCode.NoContent, client.leave(relRefA, asking.sessionId, asking.csrfToken).status)
 
+        // One sign-in per person now (#314), so the session lives on for the account's other
+        // relationships; it is this relationship it can no longer reach, on every machine.
+        assertEquals(HttpStatusCode.Forbidden, ownerKeysWith(onTheClinicMachine))
         assertEquals(
-            AuthStore.SessionCheck.MISSING,
+            AuthStore.SessionCheck.OK,
             f.auth.validateSession(onTheClinicMachine.sessionId, f.cfg.sessionIdleSeconds).check,
         )
     }
@@ -196,7 +199,7 @@ class RelationshipEndingRoutesTest {
     }
 
     @Test
-    fun `after leaving, a correct code no longer opens the door`() = testApplication {
+    fun `after leaving, a correct code signs in and no longer reaches the relationship`() = testApplication {
         // A REAL clock for this one. The verify path deliberately asks the STORE what time it is, so
         // that a lockout the store wrote and a route deciding whether it is still in force cannot
         // disagree — which means a pinned store clock and a code generated off the wall clock would
@@ -220,36 +223,42 @@ class RelationshipEndingRoutesTest {
             )
         }
 
-        val session = f.auth.createSession("cred-leaving", relRefA, f.cfg.sessionIdleSeconds, f.cfg.sessionAbsoluteSeconds)
+        listOf(relRefA, relRefB).forEach { f.auth.registerOwnerKeys(it, Secrets.b64url(ByteArray(32) { 1 }), Secrets.b64url(ByteArray(32) { 2 })) }
+        val session = f.auth.createSession("cred-leaving", f.cfg.sessionIdleSeconds, f.cfg.sessionAbsoluteSeconds)
         assertEquals(HttpStatusCode.NoContent, client.leave(relRefA, session.sessionId, session.csrfToken).status)
 
         val secondsNow = System.currentTimeMillis() / 1000
+        fun cookieOf(res: HttpResponse) = res.headers.getAll(HttpHeaders.SetCookie).orEmpty().first { it.startsWith("daymark_session=") }.substringBefore(';')
+
         // A fresh, correct, unspent code from the ended clinician's own authenticator — the exact
         // thing a saved copy of the key record plus the passphrase plus the phone would give
-        // somebody. Refused, and 410 rather than 401 because re-authenticating cannot help.
-        val refused = client.post("/v1/totp/verify") {
+        // somebody. It signs the account in, because the account is one person's sign-in for every
+        // relationship they hold (#314), and the ended relationship is refused on the next request.
+        val signedIn = client.post("/v1/totp/verify") {
             contentType(ContentType.Application.Json)
             setBody("""{"credentialId":"cred-leaving","code":"${Totp.code(leftSecret, secondsNow)}"}""")
         }
-        assertEquals(HttpStatusCode.Gone, refused.status)
-        assertNull(refused.headers[HttpHeaders.SetCookie], "no session may be issued on the way out")
+        assertEquals(HttpStatusCode.OK, signedIn.status)
+        assertEquals(
+            HttpStatusCode.Forbidden,
+            client.get("/v1/relations/$relRefA/owner-keys") { header(HttpHeaders.Cookie, cookieOf(signedIn)) }.status,
+        )
 
-        // THE CONTROL, on a second credential and a second relationship that nobody left: same
-        // enrolment, same code generation, same route — and it signs in. Without it the refusal
-        // above would be satisfied by a credential that never worked at all. It is a separate
-        // credential rather than the same one signing in first because a code is single-use, and a
-        // replayed one is refused as a wrong code — which would have hidden the very thing this is
-        // measuring behind an identical-looking 401.
+        // THE CONTROL, on a second account and a second relationship that nobody left: same
+        // enrolment, same code generation, same route, and it reaches its relationship.
         val allowed = client.post("/v1/totp/verify") {
             contentType(ContentType.Application.Json)
             setBody("""{"credentialId":"cred-live","code":"${Totp.code(liveSecret, secondsNow)}"}""")
         }
         assertEquals(HttpStatusCode.OK, allowed.status)
-        assertNotNull(allowed.headers[HttpHeaders.SetCookie])
+        assertEquals(
+            HttpStatusCode.OK,
+            client.get("/v1/relations/$relRefB/owner-keys") { header(HttpHeaders.Cookie, cookieOf(allowed)) }.status,
+        )
 
         // And the ended credential's row was never deleted or rewritten. That is what keeps the
         // unique rel_ref index able to refuse a second enrolment against this relationship.
-        assertNotNull(f.auth.getTotp("cred-leaving"))
+        assertNotNull(f.auth.account("cred-leaving"))
     }
 
     @Test

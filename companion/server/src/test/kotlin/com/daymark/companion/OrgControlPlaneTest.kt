@@ -802,7 +802,7 @@ class OrgControlPlaneTest {
         // device is to hand. "Never make the safe direction expensive" — the asymmetry IS the
         // control, and re-adding the person still costs step-up, so the round trip stays expensive
         // in the widening direction only.
-        assertNull(f.auth.getTotp("adminA"))
+        assertNull(f.auth.account("adminA"))
         val removed = client.delete("/v1/orgs/orgA/members/leaver") { asMember(admin, csrf = true) }
         assertEquals(HttpStatusCode.OK, removed.status)
         assertNull(f.orgs.membership("orgA", "leaver"))
