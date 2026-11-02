@@ -162,22 +162,30 @@ class TakeAMomentSourceTest {
     private fun inks(frame: String): Map<String, List<String>> {
         val code = withoutComments(frame)
         val body = code.substring(code.indexOf("internal object CalmInk"))
-        return Regex("""val (\w+): [^\n]+\n\s+@Composable get\(\) = (.+?)(?=\n\s+val |\n}\s*$)""", RegexOption.DOT_MATCHES_ALL)
+        return Regex("""val (\w+): [^\n]+\n\s+@Composable get\(\) = (.+?)(?=\n\s+val |\n})""", RegexOption.DOT_MATCHES_ALL)
             .findAll(body)
             .associate { m -> m.groupValues[1] to Regex("""colorScheme\.(\w+)""").findAll(m.groupValues[2]).map { it.groupValues[1] }.toList() }
     }
 
-    /** Every piece or line role whose colour, in either scheme, is the same token as a ground it is drawn on. */
+    /**
+     * Every piece or line role whose colour, in either scheme, is the same token as a ground it is
+     * drawn on. The shade and the light are drawn only in the sand and on the pieces, and each is
+     * picked at run time from two roles, so both of its roles must stand off the sand.
+     */
     private fun invisible(frame: String): List<String> {
         val theme = read("app/src/main/java/com/daymark/app/ui/theme/Theme.kt")
         val ink = inks(frame)
-        listOf("ground", "sand", "shades", "line", "shelf").forEach { assertTrue("CalmInk.$it is read", ink[it]?.isNotEmpty() == true) }
+        listOf("ground", "sand", "shades", "line", "shelf", "deep", "lit").forEach { assertTrue("CalmInk.$it is read", ink[it]?.isNotEmpty() == true) }
+        val drawnOn = mapOf(
+            "ground" to listOf("shades", "line", "shelf"),
+            "sand" to listOf("shades", "line", "shelf", "deep", "lit"),
+        )
         val found = mutableListOf<String>()
         for (opener in listOf("lightColorScheme(", "darkColorScheme(")) {
             val scheme = roles(theme, opener)
-            for (ground in listOf("ground", "sand")) {
+            for ((ground, pieces) in drawnOn) {
                 val g = ink.getValue(ground).map { scheme.getValue(it) }
-                for (piece in listOf("shades", "line", "shelf")) {
+                for (piece in pieces) {
                     ink.getValue(piece).filter { scheme.getValue(it) in g }.forEach { found += "$opener $piece.$it on $ground" }
                 }
             }
@@ -193,6 +201,9 @@ class TakeAMomentSourceTest {
         // palette, the same token as the sand, and the check sees it.
         val planted = replaceOnce(frame, "MaterialTheme.colorScheme.tertiary,\n", "MaterialTheme.colorScheme.secondaryContainer,\n")
         assertTrue(invisible(planted).isNotEmpty())
+        // And a groove's shade drawn from the sand's own role is seen too.
+        val flat = replaceOnce(frame, "MaterialTheme.colorScheme.background).minBy", "MaterialTheme.colorScheme.surfaceVariant).minBy")
+        assertTrue(invisible(flat).any { it.contains("deep.surfaceVariant") })
         // And no activity reaches past CalmInk to draw with a role of its own.
         listOf(CALM[1], CALM[2], CALM[3]).forEach { path ->
             val roles = Regex("""colorScheme\.(\w+)""").findAll(codeOnly(read(path))).map { it.groupValues[1] }.toSet()

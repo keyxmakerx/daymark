@@ -4,7 +4,9 @@ import kotlin.math.hypot
 
 /**
  * "Sand to rake", the calm activity in Take a moment with nothing in it that can be done wrong
- * (#170). A finger drawn across the sand leaves [TINES] parallel grooves; "Smooth" wipes it flat.
+ * (#170). Drawn with the rake, a finger leaves [TINES] parallel grooves, and the sand under the rake
+ * is smoothed first, so raking across old lines wipes them as real sand would; drawn with a finger,
+ * it leaves one wider groove. "Smooth" wipes it all flat.
  *
  * Import-free like [CalmBlocks], so `tools/jvm-tests.sh calm` runs it. The Compose screen keeps the
  * strokes and draws them; the geometry, and the limit on how much is kept, live here.
@@ -25,6 +27,32 @@ object SandRake {
     /** How many grooves one finger leaves, and how far apart, in density-independent pixels. */
     const val TINES = 4
     const val TINE_SPACING_DP = 9f
+
+    /** What draws in the sand: how many grooves, and how wide each is, in density-independent pixels. */
+    enum class Tool(val tines: Int, val grooveDp: Float) {
+        RAKE(TINES, 3.6f),
+        FINGER(1, 7f),
+    }
+
+    /**
+     * The line [offset] to one side of [points], for one groove of a rake: each point moved along
+     * the normal of the stroke where it is, taken from its two neighbours so the line bends with the
+     * stroke instead of kinking at every point. A point with no direction around it (all its
+     * neighbours on top of it) keeps the last direction there was, or stays put if there was none.
+     */
+    fun offsetLine(points: List<Point>, offset: Float): List<Point> {
+        var nx = 0f
+        var ny = 0f
+        return points.indices.map { i ->
+            val a = points[maxOf(0, i - 1)]
+            val b = points[minOf(points.size - 1, i + 1)]
+            val dx = b.x - a.x
+            val dy = b.y - a.y
+            val length = hypot(dx, dy)
+            if (length > 0f) { nx = -dy / length; ny = dx / length }
+            Point(points[i].x + nx * offset, points[i].y + ny * offset)
+        }
+    }
 
     /** Points closer than this to the last kept one are not kept: they add nothing a person sees. */
     const val MIN_STEP_DP = 3f

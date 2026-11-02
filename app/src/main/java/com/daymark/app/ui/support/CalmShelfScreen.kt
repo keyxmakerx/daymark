@@ -43,8 +43,9 @@ import com.daymark.app.util.Haptics
 import kotlin.math.roundToInt
 
 /**
- * "Tidy a little shelf": books go on two shelves in any order, and a firm shake of the phone, or the
- * Shake button, tumbles them loose again (#170).
+ * "Tidy a little shelf": books go anywhere on two shelves, in any order, and a firm shake of the
+ * phone, or the Shake button, tumbles them loose again (#170). While a book is held over a shelf,
+ * the books there already make room for it, so the person sees where it will stand before letting go.
  *
  * Every rule lives in `calm/CalmShelf.kt`: there is no right order and no "done", and books move
  * only when the person drags or taps one, shakes the phone or presses Shake. Nothing animates, so
@@ -79,7 +80,7 @@ fun CalmShelfScreen(onBackToMenu: () -> Unit) {
 
     CalmActivityFrame(title = "Tidy a little shelf", onBackToMenu = onBackToMenu) {
         Text(
-            "Put the books on the shelves, in any order. Shake the phone to tumble them loose.",
+            "Put the books anywhere on the shelves. Shake the phone to tumble them loose.",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -114,21 +115,35 @@ private fun Room(shelf: CalmShelf, onChange: (CalmShelf) -> Unit) {
         val floorY = heightPx - unit * 2
         val floorSpan = widthPx - 2 * pad
 
-        fun shelfX(row: List<Int>, upTo: Int): Float =
-            pad + row.take(upTo).sumOf { CalmShelf.BOOKS[it].width + CalmShelf.GAP } * unit
-
-        /** Top-left and size, in pixels, of where [id] rests now. */
-        fun rest(id: Int): Pair<Offset, Pair<Float, Float>> {
+        /** Top-left and size, in pixels, of where [id] rests on [on]. */
+        fun rest(id: Int, on: CalmShelf = board): Pair<Offset, Pair<Float, Float>> {
             val book = CalmShelf.BOOKS[id]
-            board.shelves.forEachIndexed { s, row ->
-                val i = row.indexOf(id)
-                if (i >= 0) return Offset(shelfX(row, i), shelfY[s] - book.height * unit) to (book.width * unit to book.height * unit)
+            on.shelves.forEachIndexed { s, row ->
+                row.firstOrNull { it.id == id }?.let { standing ->
+                    return Offset(pad + standing.at * unit, shelfY[s] - book.height * unit) to (book.width * unit to book.height * unit)
+                }
             }
-            val loose = board.loose.getValue(id)
+            val loose = on.loose.getValue(id)
             val w = (if (loose.lying) book.height else book.width) * unit
             val h = (if (loose.lying) book.width else book.height) * unit
             return Offset(pad + loose.x * floorSpan, floorY - h) to (w to h)
         }
+
+        /** Where [id] would go if let go now, [moved] from where it rests: a shelf and a left edge, or null for the floor. */
+        fun target(id: Int, moved: Offset): Pair<Int, Float>? {
+            val (start, dims) = rest(id)
+            val left = start.x + moved.x
+            val bottom = start.y + moved.y + dims.second
+            val shelf = shelfY.indexOfFirst { y -> bottom in (y - unit * 8)..(y + unit * 4) }
+            if (shelf < 0 || !board.hasRoomFor(id, shelf)) return null
+            // A book carried on its side stands up on the shelf, centred where it was held.
+            val width = CalmShelf.BOOKS[id].width * unit
+            return shelf to (left + dims.first / 2 - width / 2 - pad) / unit
+        }
+
+        // While a book is held over a shelf, the others already stand where they will make room.
+        val held = dragging
+        val shown = held?.let { id -> target(id, drag)?.let { (s, at) -> board.place(id, s, at) } } ?: board
 
         shelfY.forEach { y ->
             Box(
@@ -139,20 +154,20 @@ private fun Room(shelf: CalmShelf, onChange: (CalmShelf) -> Unit) {
         }
 
         CalmShelf.BOOKS.forEach { book ->
-            val (at, size) = rest(book.id)
             val moving = dragging == book.id
-            val shown = if (moving) at + drag else at
+            val (at, size) = rest(book.id, if (moving) board else shown)
+            val drawnAt = if (moving) at + drag else at
             Box(
                 Modifier
                     .zIndex(if (moving) 1f else 0f)
-                    .offset { IntOffset(shown.x.roundToInt(), shown.y.roundToInt()) }
+                    .offset { IntOffset(drawnAt.x.roundToInt(), drawnAt.y.roundToInt()) }
                     .size(with(density) { size.first.toDp() }, with(density) { size.second.toDp() })
                     .background(shades[book.shade], RoundedCornerShape(3.dp))
                     .clickable {
                         // The one-tap way, for anyone who cannot drag: a loose book stands at the end
                         // of the first shelf with room. A book already up stays where it is.
                         if (book.id in board.loose) {
-                            board.shelfWithRoomFor(book.id)?.let { s -> change(board.place(book.id, s, Int.MAX_VALUE)) }
+                            board.shelfWithRoomFor(book.id)?.let { s -> change(board.place(book.id, s, board.endOf(s))) }
                         }
                     }
                     .pointerInput(book.id, widthPx, heightPx) {
@@ -161,22 +176,11 @@ private fun Room(shelf: CalmShelf, onChange: (CalmShelf) -> Unit) {
                             onDrag = { change, amount -> change.consume(); drag += amount },
                             onDragCancel = { dragging = null; drag = Offset.Zero },
                             onDragEnd = {
-                                val (start, dims) = rest(book.id)
-                                val left = start.x + drag.x
-                                val bottom = start.y + drag.y + dims.second
-                                val middle = left + dims.first / 2
-                                val target = shelfY.indexOfFirst { y -> bottom in (y - unit * 8)..(y + unit * 4) }
                                 val now = board
-                                var next = now
-                                if (target >= 0) {
-                                    val row = now.shelves[target].filterNot { it == book.id }
-                                    val index = row.indices.count { i ->
-                                        shelfX(row, i) + CalmShelf.BOOKS[row[i]].width * unit / 2 < middle
-                                    }
-                                    next = now.place(book.id, target, index)
-                                }
-                                // Not on a shelf, or no room there: it lies where it was let go.
-                                if (next == now) next = now.putDown(book.id, (left - pad) / floorSpan)
+                                val left = rest(book.id).first.x + drag.x
+                                // Over a shelf with room it stands there; anywhere else it lies where it was let go.
+                                val next = target(book.id, drag)?.let { (s, at) -> now.place(book.id, s, at) }
+                                    ?: now.putDown(book.id, (left - pad) / floorSpan)
                                 dragging = null
                                 drag = Offset.Zero
                                 change(next)

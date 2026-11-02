@@ -9,7 +9,7 @@ package com.daymark.app.calm
  *
  * ## What it must keep true
  *
- *  1. **There is no right order and no "done".** A book can go anywhere there is room, in any order,
+ *  1. **There is no right order and no "done".** A book can go anywhere along a shelf, in any order,
  *     and nothing here knows or says when every book is up. There is deliberately no function that
  *     asks whether the shelves are full or tidy, because the first thing a screen would do with one
  *     is say so (`docs/FEATURES.md` §7.2.1).
@@ -17,10 +17,13 @@ package com.daymark.app.calm
  *     [tumble], and the screen calls each only from the person's own drag, tap, shake or button.
  *  3. **Nothing is counted.** The state is where each book is, and nothing else.
  *  4. **Deterministic.** [tumble] scatters by a written-out hash of its seed, so a test can replay it.
+ *  5. **A book stays where it is put.** [place] stands it with its left edge where the person let go,
+ *     and the books beside it scoot along only as far as they must to make room. Only the end of the
+ *     shelf can push the new book itself aside. No two books on a shelf ever overlap.
  */
 data class CalmShelf(
-    /** Each shelf's books, left to right, by id. */
-    val shelves: List<List<Int>>,
+    /** Each shelf's books, left to right. */
+    val shelves: List<List<Standing>>,
     /** Books lying loose on the floor, by id. */
     val loose: Map<Int, Loose>,
 ) {
@@ -33,22 +36,46 @@ data class CalmShelf(
      */
     data class Loose(val x: Float, val lying: Boolean)
 
+    /** A book standing on a shelf: [at] is its left edge, in shelf units from the shelf's left end. */
+    data class Standing(val id: Int, val at: Float)
+
     /**
-     * Stand [book] on [shelf] at [index] (clamped to the shelf), taking it from wherever it was.
-     * If it would not fit, nothing changes, without comment.
+     * Stand [book] on [shelf] with its left edge at [at] (kept on the shelf), taking it from wherever
+     * it was. Its neighbours scoot along just far enough to make room, and only when the shelf's end
+     * is in the way does the new book give ground too. If the books would not all fit, nothing
+     * changes, without comment.
      */
-    fun place(book: Int, shelf: Int, index: Int): CalmShelf {
+    fun place(book: Int, shelf: Int, at: Float): CalmShelf {
         if (shelf !in shelves.indices) return this
-        val without = shelves.map { row -> row.filterNot { it == book } }
-        if (used(without[shelf]) + BOOKS[book].width > CAPACITY) return this
-        val row = without[shelf].toMutableList()
-        row.add(index.coerceIn(0, row.size), book)
+        val without = shelves.map { row -> row.filterNot { it.id == book } }
+        val width = BOOKS[book].width
+        if (!hasRoomFor(book, shelf)) return this
+        val others = without[shelf]
+        val wanted = at.coerceIn(0f, (CAPACITY - width).toFloat())
+        // The new book goes before the first neighbour whose middle is right of its own middle.
+        val index = others.indexOfFirst { it.at + BOOKS[it.id].width / 2f > wanted + width / 2f }
+            .let { if (it < 0) others.size else it }
+        val ids = others.take(index).map { it.id } + book + others.drop(index).map { it.id }
+        val left = (others.take(index).map { it.at } + wanted + others.drop(index).map { it.at }).toFloatArray()
+        val w = ids.map { BOOKS[it].width.toFloat() }
+        // The books to its left step left, each only as far as it must. The pass from the left end
+        // that follows does the same for the books to its right, and keeps everything on the shelf.
+        for (i in index - 1 downTo 0) left[i] = minOf(left[i], left[i + 1] - GAP - w[i])
+        var edge = 0f
+        for (i in ids.indices) { left[i] = maxOf(left[i], edge); edge = left[i] + w[i] + GAP }
+        edge = CAPACITY.toFloat()
+        for (i in ids.indices.reversed()) { left[i] = minOf(left[i], edge - w[i]); edge = left[i] - GAP }
+        val row = ids.mapIndexed { i, id -> Standing(id, left[i]) }
         return CalmShelf(without.mapIndexed { i, r -> if (i == shelf) row else r }, loose - book)
     }
 
+    /** Where a book stands if put just after the last one on [shelf]: what a tap on a loose book uses. */
+    fun endOf(shelf: Int): Float =
+        shelves[shelf].maxOfOrNull { it.at + BOOKS[it.id].width + GAP } ?: 0f
+
     /** Put [book] on the floor at [x], standing up, taking it from wherever it was. */
     fun putDown(book: Int, x: Float): CalmShelf = CalmShelf(
-        shelves.map { row -> row.filterNot { it == book } },
+        shelves.map { row -> row.filterNot { it.id == book } },
         loose + (book to Loose(x.coerceIn(0f, MAX_LOOSE_X), lying = false)),
     )
 
@@ -65,11 +92,14 @@ data class CalmShelf(
      * The first shelf with room for [book], top first, or null when none has. A tap on a loose book
      * stands it at the end of this shelf: the one-tap way to do it, for anyone who cannot drag.
      */
-    fun shelfWithRoomFor(book: Int): Int? =
-        shelves.indices.firstOrNull { used(shelves[it].filterNot { b -> b == book }) + BOOKS[book].width <= CAPACITY }
+    fun shelfWithRoomFor(book: Int): Int? = shelves.indices.firstOrNull { hasRoomFor(book, it) }
+
+    /** Whether [book] fits on [shelf] beside what is already there, counting it out if it is there now. */
+    fun hasRoomFor(book: Int, shelf: Int): Boolean =
+        shelf in shelves.indices && used(shelves[shelf].filterNot { it.id == book }) + BOOKS[book].width <= CAPACITY
 
     /** Shelf units taken along [row], including a gap after each book. */
-    private fun used(row: List<Int>): Int = row.sumOf { BOOKS[it].width + GAP }
+    private fun used(row: List<Standing>): Int = row.sumOf { BOOKS[it.id].width + GAP }
 
     companion object {
         const val SHELVES = 2

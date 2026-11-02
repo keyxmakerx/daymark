@@ -1,5 +1,7 @@
 package com.daymark.app.ui.support
 
+import android.content.Context
+import android.provider.Settings
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,6 +21,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.unit.dp
 import com.daymark.app.calm.CalmSession
 import kotlinx.coroutines.delay
@@ -94,7 +97,30 @@ internal object CalmInk {
     val line: Color
         @Composable get() = MaterialTheme.colorScheme.tertiary
 
-    /** The shelves themselves. */
+    /** The shelves themselves, and the board that smooths the sand. */
     val shelf: Color
         @Composable get() = MaterialTheme.colorScheme.secondary
+
+    /**
+     * Shade: the near wall of a groove, the foot of a block. Whichever of the faint ink and the page
+     * is darker in this theme, so it is darker than the sand in both.
+     */
+    val deep: Color
+        @Composable get() = listOf(MaterialTheme.colorScheme.tertiary, MaterialTheme.colorScheme.background).minBy { it.luminance() }
+
+    /**
+     * Light: the far wall of a groove, the top edge of a block. Whichever of the faint ink and the
+     * sheet is lighter in this theme, so it is lighter than the sand in both.
+     */
+    val lit: Color
+        @Composable get() = listOf(MaterialTheme.colorScheme.tertiary, MaterialTheme.colorScheme.surface).maxBy { it.luminance() }
 }
+
+/**
+ * Whether the person has removed animations in the system settings. The calm activities move only
+ * in answer to a touch: a shape slides down when let fall, a full row fades, the smoothing board
+ * crosses the sand. With animations removed, each of those happens at once. The same signal the sky
+ * reads (`docs/SKY.md` §7.4), kept local here as it is there.
+ */
+internal fun prefersStillness(context: Context): Boolean =
+    Settings.Global.getFloat(context.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f) == 0f

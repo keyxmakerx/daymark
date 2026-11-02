@@ -21,6 +21,29 @@ class SandRakeTest {
     }
 
     @Test
+    fun `a groove beside a stroke runs alongside it, bending with it`() {
+        // A straight stroke: the line beside it is the same stroke moved sideways by the offset.
+        val straight = listOf(Point(0f, 0f), Point(5f, 0f), Point(10f, 0f))
+        assertEquals(listOf(Point(0f, 6f), Point(5f, 6f), Point(10f, 6f)), SandRake.offsetLine(straight, 6f))
+        // A right-angle turn: the corner point moves along the bisector, not along either leg, so
+        // the groove rounds the corner instead of kinking.
+        val corner = SandRake.offsetLine(listOf(Point(0f, 0f), Point(10f, 0f), Point(10f, 10f)), 2f)[1]
+        assertEquals(abs(corner.x - 10f), abs(corner.y), 0.001f)
+        assertTrue(abs(corner.y) > 0.5f)
+        // A point with no direction around it keeps the last direction, and nothing becomes NaN.
+        val still = SandRake.offsetLine(listOf(Point(0f, 0f), Point(4f, 0f), Point(4f, 0f), Point(4f, 0f)), 1f)
+        assertTrue(still.all { !it.x.isNaN() && !it.y.isNaN() })
+        assertEquals(1f, still.last().y, 0.001f)
+    }
+
+    @Test
+    fun `the rake leaves several grooves and a finger one`() {
+        assertEquals(SandRake.TINES, SandRake.Tool.RAKE.tines)
+        assertEquals(1, SandRake.Tool.FINGER.tines)
+        assertTrue(SandRake.Tool.FINGER.grooveDp > SandRake.Tool.RAKE.grooveDp)
+    }
+
+    @Test
     fun `a still finger leaves nothing`() {
         assertTrue(SandRake.tines(Point(4f, 4f), Point(4f, 4f), 9f).isEmpty())
     }
