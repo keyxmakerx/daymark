@@ -95,14 +95,9 @@ private fun Room(shelf: CalmShelf, onChange: (CalmShelf) -> Unit) {
     // never through a captured copy of a board that has since changed.
     val board by rememberUpdatedState(shelf)
     val change by rememberUpdatedState(onChange)
-    // Muted container roles for the books, a quiet surface for the wall, never a raw colour.
-    val shades = listOf(
-        MaterialTheme.colorScheme.secondaryContainer,
-        MaterialTheme.colorScheme.tertiaryContainer,
-        MaterialTheme.colorScheme.primaryContainer,
-    )
-    val wall = MaterialTheme.colorScheme.surfaceVariant
-    val wood = MaterialTheme.colorScheme.outline
+    val shades = CalmInk.shades
+    val wall = CalmInk.ground
+    val wood = CalmInk.shelf
     val density = LocalDensity.current
     var dragging by remember { mutableStateOf<Int?>(null) }
     var drag by remember { mutableStateOf(Offset.Zero) }

@@ -64,14 +64,9 @@ fun CalmBlocksScreen(onBackToMenu: () -> Unit) {
 
 @Composable
 private fun ColumnScope.Board(board: CalmBlocks) {
-    // Muted container roles, never a raw colour and never the mood colours.
-    val shades = listOf(
-        MaterialTheme.colorScheme.secondaryContainer,
-        MaterialTheme.colorScheme.tertiaryContainer,
-        MaterialTheme.colorScheme.primaryContainer,
-    )
-    val well = MaterialTheme.colorScheme.surfaceVariant
-    val line = MaterialTheme.colorScheme.outline
+    val shades = CalmInk.shades
+    val well = CalmInk.ground
+    val line = CalmInk.line
     val landing = board.landing().absolute.toSet()
     val inHand = board.piece.absolute.toSet()
     Box(

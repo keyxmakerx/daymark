@@ -149,4 +149,54 @@ class TakeAMomentSourceTest {
         // Both activities sit inside the frame.
         listOf(CALM[1], CALM[2], CALM[3]).forEach { assertTrue(it, withoutComments(read(it)).contains("CalmActivityFrame(")) }
     }
+
+    /** Role to colour token, for one scheme block of Theme.kt (`lightColorScheme(` or `darkColorScheme(`). */
+    private fun roles(theme: String, opener: String): Map<String, String> {
+        val start = theme.indexOf(opener)
+        assertTrue(opener, start >= 0)
+        val block = theme.substring(start, theme.indexOf("\n)", start))
+        return Regex("""(\w+) = (\w+),""").findAll(block).associate { it.groupValues[1] to it.groupValues[2] }
+    }
+
+    /** The roles each CalmInk property reads, in [frame]'s source. */
+    private fun inks(frame: String): Map<String, List<String>> {
+        val code = withoutComments(frame)
+        val body = code.substring(code.indexOf("internal object CalmInk"))
+        return Regex("""val (\w+): [^\n]+\n\s+@Composable get\(\) = (.+?)(?=\n\s+val |\n}\s*$)""", RegexOption.DOT_MATCHES_ALL)
+            .findAll(body)
+            .associate { m -> m.groupValues[1] to Regex("""colorScheme\.(\w+)""").findAll(m.groupValues[2]).map { it.groupValues[1] }.toList() }
+    }
+
+    /** Every piece or line role whose colour, in either scheme, is the same token as a ground it is drawn on. */
+    private fun invisible(frame: String): List<String> {
+        val theme = read("app/src/main/java/com/daymark/app/ui/theme/Theme.kt")
+        val ink = inks(frame)
+        listOf("ground", "sand", "shades", "line", "shelf").forEach { assertTrue("CalmInk.$it is read", ink[it]?.isNotEmpty() == true) }
+        val found = mutableListOf<String>()
+        for (opener in listOf("lightColorScheme(", "darkColorScheme(")) {
+            val scheme = roles(theme, opener)
+            for (ground in listOf("ground", "sand")) {
+                val g = ink.getValue(ground).map { scheme.getValue(it) }
+                for (piece in listOf("shades", "line", "shelf")) {
+                    ink.getValue(piece).filter { scheme.getValue(it) in g }.forEach { found += "$opener $piece.$it on $ground" }
+                }
+            }
+        }
+        return found
+    }
+
+    @Test
+    fun `every block, groove, book and shelf is a different colour from what it is drawn on`() {
+        val frame = read(CALM[0])
+        assertEquals(emptyList<String>(), invisible(frame))
+        // Planted control: the container roles the activities first used are the hairline in this
+        // palette, the same token as the sand, and the check sees it.
+        val planted = replaceOnce(frame, "MaterialTheme.colorScheme.tertiary,\n", "MaterialTheme.colorScheme.secondaryContainer,\n")
+        assertTrue(invisible(planted).isNotEmpty())
+        // And no activity reaches past CalmInk to draw with a role of its own.
+        listOf(CALM[1], CALM[2], CALM[3]).forEach { path ->
+            val roles = Regex("""colorScheme\.(\w+)""").findAll(codeOnly(read(path))).map { it.groupValues[1] }.toSet()
+            assertEquals(path, setOf("onSurfaceVariant"), roles)
+        }
+    }
 }
