@@ -206,8 +206,9 @@ export const KEEP_ACCESS = 'Keep access'
  * no way to say it usefully.
  */
 export const LEAVE_LOCKS_YOUR_NOTES =
-  'Your own notes about this person are locked to the key that leaving removes, so they cannot be ' +
-  'opened afterwards. If you need to keep them, download a plain copy from Notes first.'
+  'Your own notes about this person are locked to the key that leaving removes, and their copy on ' +
+  'the server is deleted, so they cannot be opened afterwards. If you need to keep them, download a ' +
+  'plain copy from Notes first.'
 
 export const LEAVE_CONFIRM = 'Leave'
 

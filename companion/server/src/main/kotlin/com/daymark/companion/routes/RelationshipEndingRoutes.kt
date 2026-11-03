@@ -8,6 +8,7 @@ import com.daymark.companion.clientAddress
 import com.daymark.companion.storage.AuditAction
 import com.daymark.companion.storage.AuditActor
 import com.daymark.companion.storage.AuditStore
+import com.daymark.companion.storage.ClinicianNotesStore
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
@@ -104,6 +105,8 @@ fun Route.relationshipEndingRoutes(
     sessionIdleSeconds: Long,
     auditStore: AuditStore,
     auditSourceIp: Boolean = false,
+    /** The clinician's own notebook, removed by the ending because nobody can sign in to read it after. */
+    notesStore: ClinicianNotesStore? = null,
     /** Same budget and sizing as the other cookie surfaces; see TherapistKeyRoutes for why it is built here. */
     therapistLimiter: AttemptLimiter = AttemptLimiter(THERAPIST_MAX_PER_WINDOW, THERAPIST_WINDOW_MS),
 ) {
@@ -173,6 +176,9 @@ fun Route.relationshipEndingRoutes(
             // Every session this credential holds, not just the one that asked. A clinician saying
             // they are finished means finished on the clinic machine they walked away from too.
             authStore.revokeSessionsForCredential(credentialId)
+            // The clinician's own locked notebook goes too: the key that opens it is removed in their
+            // browser by the same act, and no session can reach it again. Nothing of the owner's.
+            notesStore?.let { runCatching { it.delete(relRef) } }
             call.respond(HttpStatusCode.NoContent)
             if (write == AuthStore.EndingWrite.RECORDED) {
                 auditSafely {

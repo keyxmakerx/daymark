@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
-  MAX_TAGS, draftProblem, exportText, findNotes, isNotebook, keepDraft, normaliseTag, parseTags,
-  removeNote, tagCounts, upsert, type Note,
+  MAX_TAGS, asNotebook, deleteFromNotebook, draftProblem, emptyNotebook, exportText, findNotes, isNoteList,
+  keepDraft, mergeNotebooks, normaliseTag, parseTags, removeNote, sameNotebook, tagCounts, upsert,
+  type Note, type Notebook,
 } from './notes'
 import { forgetLock, load, notesLock, open, save, seal, storageKey, type NotesStorage } from './vault'
 import { initAssignmentCrypto } from '../assignments/crypto'
@@ -95,9 +96,48 @@ describe('the plain copy', () => {
 
 describe('notebook shape', () => {
   it('accepts what it writes and refuses anything else', () => {
-    expect(isNotebook([note({})])).toBe(true)
-    expect(isNotebook([{ ...note({}), tags: [1] }])).toBe(false)
-    expect(isNotebook({})).toBe(false)
+    expect(isNoteList([note({})])).toBe(true)
+    expect(isNoteList([{ ...note({}), tags: [1] }])).toBe(false)
+    expect(isNoteList({})).toBe(false)
+  })
+  it('reads a bare list as a notebook with no deletions, and refuses a bad deletion record', () => {
+    const n = note({})
+    expect(asNotebook([n])).toEqual({ notes: [n], removed: {} })
+    expect(asNotebook({ notes: [n], removed: { x: 5 } })).toEqual({ notes: [n], removed: { x: 5 } })
+    expect(asNotebook({ notes: [n], removed: { x: 'soon' } })).toBeNull()
+    expect(asNotebook({ notes: [n] })).toBeNull()
+  })
+})
+
+describe('merging two copies', () => {
+  const book = (notes: Note[], removed: Record<string, number> = {}): Notebook => ({ notes, removed })
+  it('keeps notes from both, and the later edit of the same note', () => {
+    const a = note({ updatedAt: 10, text: 'first' })
+    const later = { ...a, updatedAt: 20, sections: [{ label: 'What we worked on', text: 'edited' }] }
+    const b = note({})
+    const m = mergeNotebooks(book([a, b]), book([later]))
+    expect(m.notes.find((n) => n.id === a.id)?.sections[0].text).toBe('edited')
+    expect(m.notes.map((n) => n.id).sort()).toEqual([a.id, b.id].sort())
+  })
+  it('does not bring back a note deleted after its last edit', () => {
+    const a = note({ updatedAt: 10 })
+    const here = deleteFromNotebook(book([a]), a.id, 15)
+    expect(mergeNotebooks(here, book([a])).notes).toEqual([])
+    // Control: the same copy merged without the deletion keeps the note.
+    expect(mergeNotebooks(book([]), book([a])).notes).toEqual([a])
+  })
+  it('keeps a note edited after it was deleted elsewhere', () => {
+    const a = note({ updatedAt: 30 })
+    expect(mergeNotebooks(book([], { [a.id]: 20 }), book([a])).notes).toEqual([a])
+  })
+  it('gives the same result in either order', () => {
+    const a = note({ updatedAt: 10 })
+    const b = note({ updatedAt: 11 })
+    const x = book([a], { gone: 3 })
+    const y = book([b, { ...a, updatedAt: 12 }], { gone: 5 })
+    expect(sameNotebook(mergeNotebooks(x, y), mergeNotebooks(y, x))).toBe(true)
+    expect(sameNotebook(x, y)).toBe(false)
+    expect(sameNotebook(emptyNotebook(), book([], {}))).toBe(true)
   })
 })
 
@@ -113,20 +153,20 @@ describe('the vault', async () => {
 
   it('round-trips under the same key and relationship', async () => {
     const lock = await notesLock(kp.privateKey, 'fp-a')
-    const ns = [note({ text: 'private words' })]
+    const ns = { notes: [note({ text: 'private words' })], removed: { old: 1 } }
     const blob = await seal(lock, ns)
     expect(blob).not.toContain('private')
     expect(await open(lock, blob)).toEqual(ns)
   })
   it('does not open under another key or another relationship', async () => {
     const lock = await notesLock(kp.privateKey, 'fp-a')
-    const blob = await seal(lock, [note({})])
+    const blob = await seal(lock, { notes: [note({})], removed: {} })
     expect(await open(await notesLock(other.privateKey, 'fp-a'), blob)).toBeNull()
     expect(await open(await notesLock(kp.privateKey, 'fp-b'), blob)).toBeNull()
   })
   it('does not open a changed blob', async () => {
     const lock = await notesLock(kp.privateKey, 'fp-a')
-    const bytes = so.from_base64(await seal(lock, [note({})]), so.base64_variants.URLSAFE_NO_PADDING)
+    const bytes = so.from_base64(await seal(lock, { notes: [note({})], removed: {} }), so.base64_variants.URLSAFE_NO_PADDING)
     const i = bytes.length - 1
     bytes[i] = bytes[i] ^ 1
     const changed = so.to_base64(bytes, so.base64_variants.URLSAFE_NO_PADDING)
@@ -136,25 +176,25 @@ describe('the vault', async () => {
     const st = memory()
     const lock = await notesLock(kp.privateKey, 'fp-a')
     const first = await load(st, lock)
-    expect(first).toEqual({ state: 'ready', notes: [] })
-    const ns = [note({})]
+    expect(first).toEqual({ state: 'ready', book: { notes: [], removed: {} } })
+    const ns = { notes: [note({})], removed: {} }
     await save(st, lock, first.state, ns)
-    expect(await load(st, lock)).toEqual({ state: 'ready', notes: ns })
+    expect(await load(st, lock)).toEqual({ state: 'ready', book: ns })
   })
   it('never writes over notes that did not open', async () => {
     const st = memory()
-    await save(st, await notesLock(kp.privateKey, 'fp-a'), 'ready', [note({})])
+    await save(st, await notesLock(kp.privateKey, 'fp-a'), 'ready', { notes: [note({})], removed: {} })
     const before = st.map.get(storageKey('fp-a'))
     const wrong = await notesLock(other.privateKey, 'fp-a')
     const loaded = await load(st, wrong)
     expect(loaded.state).toBe('unreadable')
-    await expect(save(st, wrong, loaded.state, [])).rejects.toThrow(/nothing was written/)
+    await expect(save(st, wrong, loaded.state, emptyNotebook())).rejects.toThrow(/nothing was written/)
     expect(st.map.get(storageKey('fp-a'))).toBe(before)
   })
   it('says so when the browser keeps nothing', async () => {
     const lock = await notesLock(kp.privateKey, 'fp-a')
     expect(await load(null, lock)).toEqual({ state: 'no-storage' })
-    await expect(save(null, lock, 'no-storage', [])).rejects.toThrow(/not kept/)
+    await expect(save(null, lock, 'no-storage', emptyNotebook())).rejects.toThrow(/not kept/)
   })
   it('wipes the derived key', async () => {
     const lock = await notesLock(kp.privateKey, 'fp-a')

@@ -96,6 +96,16 @@
      act on the Shared data page. */
   const go = (id: string) => (tab = id as Tab)
 
+  /* The clinician's locked notebook on the server (#548): the session's own relationship, nothing else. */
+  const notesRemote = $derived(
+    ctx
+      ? {
+          read: () => ctx!.client.readNotes(ctx!.session),
+          write: (basedOn: number, blob: string) => ctx!.client.writeNotes(ctx!.session, basedOn, blob),
+        }
+      : null,
+  )
+
   /*
    * The opened share, held HERE rather than fetched per tab.
    *
@@ -342,6 +352,7 @@
           kind={profile.noteKind}
           sections={profile.noteSections}
           {now}
+          remote={notesRemote}
         />
       {:else if grant && tab !== 'timers'}
         {#if tab === 'allowed'}

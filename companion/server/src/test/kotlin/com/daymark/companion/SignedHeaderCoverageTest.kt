@@ -70,6 +70,11 @@ class SignedHeaderCoverageTest {
                 "checked with a session cookie, the owner's only on the cookie's path above, only for a request no owner credential passed, and on the server " +
                 "console's routes always with the administrator's session"
             ),
+        "X-Notes-Base" to (
+            setOf("com/daymark/companion/routes/ClinicianNotesRoutes.kt") to
+                "the version a clinician's notebook write was based on, on a route only a clinician's session opens: no " +
+                "owner credential is consulted there, so no phone's request is one it answers"
+            ),
         "X-Stepup-Code" to (
             setOf("com/daymark/companion/routes/OrgRoutes.kt") to
                 "a practice admin's second factor, on practice-console routes that take no owner credential"
@@ -169,6 +174,7 @@ class SignedHeaderCoverageTest {
             "com/daymark/companion/routes/TherapistAuthRoutes.kt",
             "com/daymark/companion/routes/TherapistKeyRoutes.kt",
             "com/daymark/companion/routes/RelationshipEndingRoutes.kt",
+            "com/daymark/companion/routes/ClinicianNotesRoutes.kt",
             "com/daymark/companion/routes/OrgRoutes.kt",
         )
     }

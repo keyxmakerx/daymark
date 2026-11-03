@@ -154,8 +154,66 @@ export function exportText(notes: readonly Note[]): string {
     .join('\n\n----------------------------------------\n\n')
 }
 
-/** Checks a decrypted notebook is the shape this file writes. Anything else is refused whole. */
-export function isNotebook(v: unknown): v is Note[] {
+/**
+ * The whole notebook: the notes, and when each deleted note was deleted.
+ *
+ * WHY DELETIONS ARE KEPT. The notebook is kept in two places, this browser and the server (sync.ts),
+ * and two copies are merged note by note. Without a record of a deletion, merging a copy that still
+ * holds the note would bring it back. A deletion holds only the note's id and the time; nothing of
+ * what the note said.
+ */
+export interface Notebook {
+  notes: Note[]
+  removed: Record<string, number>
+}
+
+export const emptyNotebook = (): Notebook => ({ notes: [], removed: {} })
+
+/**
+ * Two copies of a notebook as one. For each note the later edit wins; a note deleted after its last
+ * edit stays deleted; a note edited after a deletion of it comes back, because the later act wins.
+ * The same inputs merge to the same result in either order.
+ */
+export function mergeNotebooks(a: Notebook, b: Notebook): Notebook {
+  const removed: Record<string, number> = { ...a.removed }
+  for (const [id, at] of Object.entries(b.removed)) removed[id] = Math.max(removed[id] ?? 0, at)
+  const byId = new Map<string, Note>()
+  for (const n of [...a.notes, ...b.notes]) {
+    const have = byId.get(n.id)
+    if (!have || n.updatedAt > have.updatedAt || (n.updatedAt === have.updatedAt && JSON.stringify(n) > JSON.stringify(have))) byId.set(n.id, n)
+  }
+  const notes = [...byId.values()].filter((n) => !(removed[n.id] >= n.updatedAt)).sort((x, y) => (x.id < y.id ? -1 : x.id > y.id ? 1 : 0))
+  return { notes, removed }
+}
+
+/** Deletes a note, remembering when, so a merge with an older copy does not bring it back. */
+export function deleteFromNotebook(book: Notebook, id: string, now: number): Notebook {
+  return { notes: removeNote(book.notes, id), removed: { ...book.removed, [id]: now } }
+}
+
+export function sameNotebook(a: Notebook, b: Notebook): boolean {
+  const canon = (x: Notebook) => {
+    const m = mergeNotebooks(x, emptyNotebook())
+    return JSON.stringify([m.notes, Object.entries(m.removed).sort(([p], [q]) => (p < q ? -1 : 1))])
+  }
+  return canon(a) === canon(b)
+}
+
+/**
+ * A decrypted notebook in either shape this code has written: a bare list of notes (before
+ * deletions were kept) or a [Notebook]. Anything else is refused whole.
+ */
+export function asNotebook(v: unknown): Notebook | null {
+  if (isNoteList(v)) return { notes: v, removed: {} }
+  if (!v || typeof v !== 'object') return null
+  const o = v as { notes?: unknown; removed?: unknown }
+  if (!isNoteList(o.notes) || !o.removed || typeof o.removed !== 'object' || Array.isArray(o.removed)) return null
+  if (!Object.values(o.removed).every((t) => typeof t === 'number')) return null
+  return { notes: o.notes, removed: o.removed as Record<string, number> }
+}
+
+/** Checks a list of notes is the shape this file writes. */
+export function isNoteList(v: unknown): v is Note[] {
   if (!Array.isArray(v)) return false
   return v.every(
     (n) =>

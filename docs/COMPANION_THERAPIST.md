@@ -328,9 +328,15 @@ keeps the names of its parts, so it reads the same after the discipline changes.
 and tags. Search matches every word typed against a note's kind, day, tags and text, ignoring case
 and accents, and choosing tags narrows to the notes that carry all of them; nothing is ranked or
 written for the clinician (`companion/web/src/lib/notes/notes.ts`). Notes are locked to a key derived
-from the clinician's box key and kept only in this browser; the server never receives them. A plain
-copy can be downloaded, and the page says at the button that the copy is not locked. No grant is
-needed. Not built: a server copy and search across clients, #548.
+from the clinician's box key. The sealed notebook is kept in this browser and as a copy on the server,
+`GET`/`PUT /v1/relations/{relRef}/notes`, which only the clinician's session reaches: the owner has no
+route to it, it is not in the access log, and it is never swept. A write names the version it was
+based on, and a copy written elsewhere in the meantime is merged note by note, keeping each note's
+later edit and every later deletion. A copy that does not open is reported and never written over,
+and a server that cannot be reached loses nothing, because the browser's copy is kept first. Leaving
+the relationship deletes the server copy. A plain copy can be downloaded, and the page says at the
+button that the copy is not locked. No grant is needed. Not built: keeping the key on the server so a
+new browser can open the notes, and search across clients, #548.
 
 ## 10. The audit log
 
